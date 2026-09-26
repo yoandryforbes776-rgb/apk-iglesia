@@ -13,10 +13,11 @@ internal data class RemoteMember(
     val active: Boolean, val createdAt: Long, val updatedAt: Long
 )
 internal data class RemoteRecord(
-    val syncId: String, val memberSyncId: String, val meetingId: Int, val attended: Boolean,
+    val syncId: String, val memberSyncId: String, val meetingId: Int, val cycleId: String, val attended: Boolean,
     val notes: String, val createdAt: Long, val updatedAt: Long, val rubricVersion: Int,
     val scores: Map<String, Int>, val penalties: Set<String>
 )
+internal data class RemoteCycle(val id:String,val name:String,val startDate:String?,val endDate:String?,val status:String,val createdAt:Long,val updatedAt:Long)
 internal data class RemoteDeletion(val syncId: String, val entityType: String, val deletedAt: Long)
 
 data class SyncResult(val members: Int, val records: Int, val completedAt: Long)
@@ -35,6 +36,16 @@ internal class SupabaseSyncService {
         return request(settings,"POST","/rest/v1/rpc/claim_church",body.toString(),token).trim().trim('"')
     }
 
+    fun pullCycles(settings: AppSettingsEntity, token: String, churchId: String): List<RemoteCycle> {
+        val json=JSONArray(request(settings,"GET","/rest/v1/ministry_cycles?church_id=eq.${encode(churchId)}&select=*",null,token))
+        return (0 until json.length()).map { i -> json.getJSONObject(i).let { o -> RemoteCycle(o.getString("id"),o.getString("name"),o.nullable("start_date"),o.nullable("end_date"),o.optString("status","ACTIVE"),o.getLong("created_at"),o.getLong("updated_at")) } }
+    }
+    fun pushCycles(settings: AppSettingsEntity, token: String, churchId: String, cycles: List<CycleEntity>) {
+        if(cycles.isEmpty()) return
+        val body=JSONArray().apply { cycles.forEach { put(JSONObject().put("workspace_id",settings.syncWorkspace).put("church_id",churchId).put("id",it.id).put("name",it.name).put("start_date",it.startDate ?: JSONObject.NULL).put("end_date",it.endDate ?: JSONObject.NULL).put("status",it.status).put("created_at",it.createdAt).put("updated_at",it.updatedAt)) } }
+        request(settings,"POST","/rest/v1/ministry_cycles?on_conflict=workspace_id,id",body.toString(),token,"resolution=merge-duplicates")
+    }
+
     fun pullMembers(settings: AppSettingsEntity, token: String, churchId: String): List<RemoteMember> {
         val json=JSONArray(request(settings,"GET","/rest/v1/ministry_members?church_id=eq.${encode(churchId)}&select=*",null,token))
         return (0 until json.length()).map { i -> json.getJSONObject(i).let { o ->
@@ -49,7 +60,7 @@ internal class SupabaseSyncService {
             val scores=scoreObject.keys().asSequence().associateWith { scoreObject.optInt(it) }
             val penaltyArray=o.optJSONArray("penalties") ?: JSONArray()
             val penalties=(0 until penaltyArray.length()).map { penaltyArray.getString(it) }.toSet()
-            RemoteRecord(o.getString("sync_id"),o.getString("member_sync_id"),o.getInt("meeting_id"),o.getBoolean("attended"),o.optString("notes"),o.getLong("created_at"),o.getLong("updated_at"),o.optInt("rubric_version",2),scores,penalties)
+            RemoteRecord(o.getString("sync_id"),o.getString("member_sync_id"),o.getInt("meeting_id"),o.optString("cycle_id","default-cycle"),o.getBoolean("attended"),o.optString("notes"),o.getLong("created_at"),o.getLong("updated_at"),o.optInt("rubric_version",2),scores,penalties)
         }}
     }
 
@@ -74,7 +85,7 @@ internal class SupabaseSyncService {
             val scores=JSONObject().apply { data.breakdown(r.id).forEach { put(it.aspect,it.points) } }
             val penalties=JSONArray().apply { data.applied.filter { it.recordId==r.id }.forEach { put(it.penaltyCode) } }
             put(JSONObject().put("workspace_id",settings.syncWorkspace).put("church_id",churchId).put("sync_id",r.syncId)
-                .put("member_sync_id",memberIds[r.memberId]).put("meeting_id",r.meetingId).put("attended",r.attended)
+                .put("member_sync_id",memberIds[r.memberId]).put("meeting_id",r.meetingId).put("cycle_id",r.cycleId).put("attended",r.attended)
                 .put("notes",r.notes).put("created_at",r.createdAt).put("updated_at",r.updatedAt)
                 .put("rubric_version",r.rubricVersion).put("scores",scores).put("penalties",penalties))
         }}

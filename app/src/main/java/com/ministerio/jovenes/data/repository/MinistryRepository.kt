@@ -16,12 +16,14 @@ class MinistryRepository(private val db: AppDatabase, context: Context) {
 
     val snapshot = combine(
         combine(dao.observeMembers(), dao.observeMeetings(), dao.observeRecords(), dao.observeScores()) { a,b,c,d -> arrayOf(a,b,c,d) },
-        combine(dao.observePenaltyTypes(), dao.observeAppliedPenalties(), dao.observeSettings(), dao.observeHistory()) { a,b,c,d -> arrayOf(a,b,c,d) }
-    ) { first, second ->
+        combine(dao.observePenaltyTypes(), dao.observeAppliedPenalties(), dao.observeSettings(), dao.observeHistory()) { a,b,c,d -> arrayOf(a,b,c,d) },
+        combine(dao.observeCycles(),dao.observeMeetingPlans()) { a,b -> arrayOf(a,b) }
+    ) { first, second, third ->
         @Suppress("UNCHECKED_CAST")
         AppSnapshot(
-            first[0] as List<MemberEntity>, first[1] as List<MeetingEntity>, first[2] as List<AttendanceRecordEntity>, first[3] as List<AspectScoreEntity>,
-            second[0] as List<PenaltyTypeEntity>, second[1] as List<AppliedPenaltyEntity>, (second[2] as AppSettingsEntity?) ?: AppSettingsEntity(), second[3] as List<ChangeLogEntity>
+            members=first[0] as List<MemberEntity>, meetings=first[1] as List<MeetingEntity>, records=first[2] as List<AttendanceRecordEntity>, scores=first[3] as List<AspectScoreEntity>,
+            penaltyTypes=second[0] as List<PenaltyTypeEntity>, applied=second[1] as List<AppliedPenaltyEntity>, settings=(second[2] as AppSettingsEntity?) ?: AppSettingsEntity(), history=second[3] as List<ChangeLogEntity>,
+            cycles=third[0] as List<CycleEntity>, meetingPlans=third[1] as List<MeetingPlanEntity>
         )
     }
 
@@ -76,10 +78,11 @@ class MinistryRepository(private val db: AppDatabase, context: Context) {
     }
 
     suspend fun saveRecord(memberId: Long, meetingId: Int, draft: RecordDraft) = db.withTransaction {
-        val existing = dao.record(memberId, meetingId)
+        val cycleId=dao.settingsSnapshot()?.activeCycleId ?: "default-cycle"
+        val existing = dao.record(memberId, meetingId, cycleId)
         val safe = if (draft.attended) draft else RecordDraft(attended=false, notes=draft.notes)
         val record = AttendanceRecordEntity(
-            id=existing?.id ?: 0, memberId=memberId, meetingId=meetingId, attended=safe.attended,
+            id=existing?.id ?: 0, memberId=memberId, meetingId=meetingId, cycleId=cycleId, attended=safe.attended,
             notes=safe.notes.trim(), createdAt=existing?.createdAt ?: System.currentTimeMillis(), updatedAt=System.currentTimeMillis(),
             syncId=existing?.syncId ?: UUID.randomUUID().toString()
         )
@@ -96,10 +99,43 @@ class MinistryRepository(private val db: AppDatabase, context: Context) {
     }
 
     suspend fun deleteRecord(memberId: Long, meetingId: Int) = db.withTransaction {
-        dao.record(memberId, meetingId)?.let {
+        val cycleId=dao.settingsSnapshot()?.activeCycleId ?: "default-cycle"
+        dao.record(memberId, meetingId, cycleId)?.let {
             it.syncId?.let { syncId -> dao.saveDeletion(SyncDeletionEntity(syncId,"RECORD")) }
             dao.deleteRecord(it.id)
             dao.log(ChangeLogEntity(entityType="RECORD", entityId=it.id.toString(), action="DELETE", summary="Registro del encuentro $meetingId eliminado"))
+        }
+    }
+
+    suspend fun createCycle(name: String, startDate: String?, endDate: String?) = db.withTransaction {
+        val id=UUID.randomUUID().toString(); val now=System.currentTimeMillis()
+        dao.saveCycle(CycleEntity(id=id,name=name.trim(),startDate=startDate?.ifBlank { null },endDate=endDate?.ifBlank { null },createdAt=now,updatedAt=now))
+        val settings=dao.settingsSnapshot() ?: AppSettingsEntity()
+        dao.saveSettings(settings.copy(activeCycleId=id,cycleName=name.trim(),updatedAt=now))
+        dao.log(ChangeLogEntity(entityType="CYCLE",entityId=id,action="CREATE",summary="Ciclo creado: ${name.trim()}"))
+    }
+
+    suspend fun selectCycle(cycle: CycleEntity) {
+        val settings=dao.settingsSnapshot() ?: AppSettingsEntity()
+        dao.saveSettings(settings.copy(activeCycleId=cycle.id,cycleName=cycle.name,updatedAt=System.currentTimeMillis()))
+    }
+
+    suspend fun closeCycle(cycle: CycleEntity) {
+        dao.saveCycle(cycle.copy(status="CLOSED",updatedAt=System.currentTimeMillis()))
+        dao.log(ChangeLogEntity(entityType="CYCLE",entityId=cycle.id,action="CLOSE",summary="Ciclo cerrado: ${cycle.name}"))
+    }
+
+    suspend fun saveMeetingPlan(plan: MeetingPlanEntity) { dao.saveMeetingPlan(plan.copy(updatedAt=System.currentTimeMillis())) }
+
+    suspend fun saveGroupAttendance(meetingId: Int, presentMemberIds: Set<Long>) {
+        dao.membersSnapshot().filter { it.active }.forEach { member ->
+            val existing=dao.record(member.id,meetingId,dao.settingsSnapshot()?.activeCycleId ?: "default-cycle")
+            val scoreRows=existing?.let { record -> dao.scoresSnapshot().filter { it.recordId==record.id } }.orEmpty()
+            val oldScores=scoreRows.associate { it.aspect to it.achieved }
+            val gamePoints=scoreRows.find { it.aspect=="GAMES" }?.points ?: 0
+            val oldPenalties=existing?.let { record -> dao.appliedSnapshot().filter { it.recordId==record.id }.map { it.penaltyCode }.toSet() }.orEmpty()
+            val draft=if(member.id in presentMemberIds) RecordDraft(attended=true,attentive=oldScores["ATTENTIVE"]==true,word=oldScores["WORD"]==true,prayer=oldScores["PRAYER"]==true,worship=oldScores["WORSHIP"]==true,standing=oldScores["STANDING"]==true,answers=oldScores["ANSWERS"]==true,gameParticipation=when { gamePoints>=15->GameParticipation.PARTICIPATES; gamePoints>0->GameParticipation.RESPECTFUL_NO_PLAY; else->GameParticipation.NONE },punctuality=oldScores["PUNCTUALITY"]==true,penalties=oldPenalties,notes=existing?.notes.orEmpty()) else RecordDraft(notes=existing?.notes.orEmpty())
+            saveRecord(member.id,meetingId,draft)
         }
     }
 
@@ -138,10 +174,15 @@ class MinistryRepository(private val db: AppDatabase, context: Context) {
             }
         }
         val deletedIds=(localDeletions.map { it.syncId }+remoteDeletions.map { it.syncId }).toSet()
+        val remoteCycles=service.pullCycles(settings,token,churchId)
         val remoteMembers=service.pullMembers(settings,token,churchId).filterNot { it.syncId in deletedIds }
         val remoteRecords=service.pullRecords(settings,token,churchId).filterNot { it.syncId in deletedIds }
 
         db.withTransaction {
+            remoteCycles.forEach { remote ->
+                val local=dao.cyclesSnapshot().find { it.id==remote.id }
+                if(local==null || remote.updatedAt>local.updatedAt) dao.saveCycle(CycleEntity(remote.id,remote.name,remote.startDate,remote.endDate,remote.status,remote.createdAt,remote.updatedAt))
+            }
             remoteMembers.forEach { remote ->
                 val local=dao.memberBySyncId(remote.syncId)
                 if(local==null) dao.insertMember(MemberEntity(fullName=remote.fullName,birthDate=remote.birthDate,groupName=remote.groupName,active=remote.active,createdAt=remote.createdAt,updatedAt=remote.updatedAt,syncId=remote.syncId))
@@ -149,9 +190,9 @@ class MinistryRepository(private val db: AppDatabase, context: Context) {
             }
             remoteRecords.forEach { remote ->
                 val member=dao.memberBySyncId(remote.memberSyncId) ?: return@forEach
-                val local=dao.recordBySyncId(remote.syncId) ?: dao.record(member.id,remote.meetingId)
+                val local=dao.recordBySyncId(remote.syncId) ?: dao.record(member.id,remote.meetingId,remote.cycleId)
                 if(local==null || remote.updatedAt>local.updatedAt) {
-                    val id=dao.upsertRecord(AttendanceRecordEntity(id=local?.id ?: 0,memberId=member.id,meetingId=remote.meetingId,attended=remote.attended,notes=remote.notes,createdAt=remote.createdAt,updatedAt=remote.updatedAt,rubricVersion=remote.rubricVersion,syncId=remote.syncId))
+                    val id=dao.upsertRecord(AttendanceRecordEntity(id=local?.id ?: 0,memberId=member.id,meetingId=remote.meetingId,cycleId=remote.cycleId,attended=remote.attended,notes=remote.notes,createdAt=remote.createdAt,updatedAt=remote.updatedAt,rubricVersion=remote.rubricVersion,syncId=remote.syncId))
                     val recordId=local?.id ?: id
                     dao.deleteScores(recordId); dao.deletePenalties(recordId)
                     dao.upsertScores(remote.scores.map { (aspect,points) -> AspectScoreEntity(recordId=recordId,aspect=aspect,achieved=points>0,points=points) })
@@ -165,8 +206,9 @@ class MinistryRepository(private val db: AppDatabase, context: Context) {
 
         val finalData=AppSnapshot(
             members=dao.membersSnapshot(),meetings=dao.meetingsSnapshot(),records=dao.recordsSnapshot(),scores=dao.scoresSnapshot(),
-            penaltyTypes=dao.penaltyTypesSnapshot(),applied=dao.appliedSnapshot(),settings=settings
+            penaltyTypes=dao.penaltyTypesSnapshot(),applied=dao.appliedSnapshot(),settings=settings,cycles=dao.cyclesSnapshot(),meetingPlans=dao.meetingPlansSnapshot()
         )
+        service.pushCycles(settings,token,churchId,finalData.cycles)
         service.pushMembers(settings,token,churchId,finalData.members)
         service.pushRecords(settings,token,churchId,finalData)
         val completed=System.currentTimeMillis()

@@ -194,3 +194,7 @@ La sesión remota se cifra con una clave AES/GCM del Android Keystore. Después 
 El esquema nuevo conserva las filas remotas existentes, crea `churches` y `church_memberships`, y asigna cada fila a su comunidad. El primer usuario autenticado que sincroniza un código existente queda como administrador. Las políticas RLS comprueban `auth.uid()` y el rol; conocer el código de comunidad ya no permite leer los datos.
 
 Para actualizar un proyecto Supabase que ya tenía las tablas, vuelve a ejecutar `supabase/schema.sql` en SQL Editor. No borra miembros ni evaluaciones.
+
+## Ciclos múltiples y asistencia grupal (v1.5)
+
+La aplicación permite crear, seleccionar y cerrar ciclos sin mezclar sus puntuaciones. Los registros anteriores se conservan en `default-cycle`. En Inicio, **Asistencia** abre una lista grupal para marcar presentes rápidamente; el detalle individual continúa disponible para completar los demás criterios. Cada encuentro puede planificarse con fecha, tema bíblico, líder y actividad. Los ciclos y sus registros se sincronizan con Supabase después de ejecutar nuevamente `supabase/schema.sql`.

@@ -42,7 +42,7 @@ import com.ministerio.jovenes.ui.theme.Teal
     }
 }
 
-@Composable fun DashboardScreen(data: AppSnapshot, goMembers:()->Unit, goRanking:()->Unit, goReports:()->Unit) {
+@Composable fun DashboardScreen(data: AppSnapshot, goMembers:()->Unit, goRanking:()->Unit, goReports:()->Unit, goGroup:()->Unit, goCycles:()->Unit) {
     val ranking=data.ranking(); val recorded=data.records.count(); val average=if(ranking.isEmpty()) 0 else ranking.sumOf { it.total }/ranking.size
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
         BrandHero("¡Paz y bendiciones!",data.settings.cycleName,Icons.Default.WbSunny)
@@ -57,7 +57,11 @@ import com.ministerio.jovenes.ui.theme.Teal
         }
         SectionHeading("Acciones rápidas","Todo lo que necesitas para acompañar al grupo")
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+            FilledTonalButton(goGroup,Modifier.weight(1f)) { Icon(Icons.Default.FactCheck,null); Spacer(Modifier.width(6.dp)); Text("Asistencia") }
             FilledTonalButton(goMembers,Modifier.weight(1f)) { Icon(Icons.Default.PersonAdd,null); Spacer(Modifier.width(6.dp)); Text("Miembros") }
+        }
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+            FilledTonalButton(goCycles,Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth,null); Spacer(Modifier.width(6.dp)); Text("Ciclos") }
             FilledTonalButton(goReports,Modifier.weight(1f)) { Icon(Icons.Default.IosShare,null); Spacer(Modifier.width(6.dp)); Text("Exportar") }
         }
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { SectionHeading("Primeros lugares","Esfuerzo que inspira",Modifier.weight(1f)); TextButton(goRanking) { Text("Ver ranking") } }

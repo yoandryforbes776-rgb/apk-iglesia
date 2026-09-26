@@ -33,18 +33,42 @@ data class MeetingEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "cycles")
+data class CycleEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val status: String = "ACTIVE",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "meeting_plans", primaryKeys = ["cycleId", "meetingId"], indices=[Index("cycleId")])
+data class MeetingPlanEntity(
+    val cycleId: String,
+    val meetingId: Int,
+    val title: String,
+    val scheduledDate: String? = null,
+    val bibleTheme: String? = null,
+    val leaderName: String? = null,
+    val activity: String? = null,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 @Entity(
     tableName = "attendance_records",
     foreignKeys = [
         ForeignKey(entity = MemberEntity::class, parentColumns = ["id"], childColumns = ["memberId"], onDelete = ForeignKey.CASCADE),
         ForeignKey(entity = MeetingEntity::class, parentColumns = ["id"], childColumns = ["meetingId"], onDelete = ForeignKey.CASCADE)
     ],
-    indices = [Index(value = ["memberId", "meetingId"], unique = true), Index("meetingId")]
+    indices = [Index(value = ["memberId", "meetingId", "cycleId"], unique = true), Index("meetingId"), Index("cycleId")]
 )
 data class AttendanceRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val memberId: Long,
     val meetingId: Int,
+    @ColumnInfo(defaultValue = "'default-cycle'") val cycleId: String = "default-cycle",
     val attended: Boolean,
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis(),
@@ -124,7 +148,8 @@ data class AppSettingsEntity(
     @ColumnInfo(defaultValue = "''") val supabaseEmail: String = "",
     @ColumnInfo(defaultValue = "''") val syncWorkspace: String = "",
     val lastSyncAt: Long? = null,
-    val supabaseChurchId: String? = null
+    val supabaseChurchId: String? = null,
+    @ColumnInfo(defaultValue = "'default-cycle'") val activeCycleId: String = "default-cycle"
 )
 
 @Entity(tableName = "sync_deletions")

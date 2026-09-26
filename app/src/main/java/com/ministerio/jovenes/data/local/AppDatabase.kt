@@ -10,8 +10,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [MemberEntity::class, MeetingEntity::class, AttendanceRecordEntity::class,
         AspectScoreEntity::class, PenaltyTypeEntity::class, AppliedPenaltyEntity::class,
-        ChangeLogEntity::class, AdminUserEntity::class, AppSettingsEntity::class, SyncDeletionEntity::class],
-    version = 6,
+        ChangeLogEntity::class, AdminUserEntity::class, AppSettingsEntity::class, SyncDeletionEntity::class, CycleEntity::class, MeetingPlanEntity::class],
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,8 +43,9 @@ abstract class AppDatabase : RoomDatabase() {
                 ).forEach { p -> db.execSQL("INSERT INTO penalty_types(code,label,points,active) VALUES(?,?,?,1)", p) }
                 db.execSQL("INSERT INTO app_settings(id,ministryName,cycleName,majorThreshold,specialThreshold,diplomaThreshold,updatedAt) VALUES(1,?,?,?,?,?,?)", arrayOf("Ministerio de Adolescentes y Jóvenes","Ciclo de 12 encuentros",1100,1000,900,now))
                 db.execSQL("UPDATE app_settings SET supabaseUrl=?, supabaseAnonKey=? WHERE id=1", arrayOf(DEFAULT_SUPABASE_URL,DEFAULT_SUPABASE_PUBLISHABLE_KEY))
+                db.execSQL("INSERT INTO cycles(id,name,status,createdAt,updatedAt) VALUES('default-cycle','Ciclo de 12 encuentros','ACTIVE',?,?)",arrayOf(now,now))
             }
-        }).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
+        }).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -91,6 +92,21 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE admin_users ADD COLUMN mustChangePassword INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val now=System.currentTimeMillis()
+                db.execSQL("CREATE TABLE IF NOT EXISTS cycles (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, startDate TEXT, endDate TEXT, status TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+                db.execSQL("INSERT OR IGNORE INTO cycles(id,name,status,createdAt,updatedAt) SELECT 'default-cycle',cycleName,'ACTIVE',updatedAt,updatedAt FROM app_settings WHERE id=1")
+                db.execSQL("CREATE TABLE IF NOT EXISTS meeting_plans (cycleId TEXT NOT NULL, meetingId INTEGER NOT NULL, title TEXT NOT NULL, scheduledDate TEXT, bibleTheme TEXT, leaderName TEXT, activity TEXT, updatedAt INTEGER NOT NULL, PRIMARY KEY(cycleId,meetingId))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_meeting_plans_cycleId ON meeting_plans(cycleId)")
+                db.execSQL("ALTER TABLE attendance_records ADD COLUMN cycleId TEXT NOT NULL DEFAULT 'default-cycle'")
+                db.execSQL("DROP INDEX IF EXISTS index_attendance_records_memberId_meetingId")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_attendance_records_memberId_meetingId_cycleId ON attendance_records(memberId,meetingId,cycleId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_attendance_records_cycleId ON attendance_records(cycleId)")
+                db.execSQL("ALTER TABLE app_settings ADD COLUMN activeCycleId TEXT NOT NULL DEFAULT 'default-cycle'")
             }
         }
     }

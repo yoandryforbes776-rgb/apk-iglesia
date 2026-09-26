@@ -36,16 +36,20 @@ private val tabs=listOf(MainTab("home","Inicio",Icons.Default.Home),MainTab("mem
                     "member/new" -> AppTopBar("Nuevo miembro",back={nav.popBackStack()})
                     "member/{id}/edit" -> AppTopBar("Editar miembro",back={nav.popBackStack()})
                     "member/{id}/meeting/{meeting}" -> AppTopBar("Registrar encuentro",back={nav.popBackStack()})
+                    "group-attendance" -> AppTopBar("Asistencia grupal",back={nav.popBackStack()})
+                    "cycles" -> AppTopBar("Gestión de ciclos",back={nav.popBackStack()})
                     else -> AppTopBar("Detalle del miembro",back={nav.popBackStack()})
                 } },
                 bottomBar={ AnimatedVisibility(main) { NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=10.dp) { val destination=entry?.destination; tabs.forEach { tab -> NavigationBarItem(selected=destination?.hierarchy?.any { it.route==tab.route }==true,onClick={nav.navigate(tab.route){popUpTo("home"){saveState=true};launchSingleTop=true;restoreState=true}},icon={Icon(tab.icon,tab.label)},label={Text(tab.label)}) } } } }
             ) { padding ->
                 NavHost(nav,"home",Modifier.padding(padding)) {
-                    composable("home") { DashboardScreen(data,{nav.navigate("members")},{nav.navigate("ranking")},{nav.navigate("reports")}) }
+                    composable("home") { DashboardScreen(data,{nav.navigate("members")},{nav.navigate("ranking")},{nav.navigate("reports")},{nav.navigate("group-attendance")},{nav.navigate("cycles")}) }
                     composable("members") { MembersScreen(data,{nav.navigate("member/$it")},{nav.navigate("member/new")}) }
                     composable("ranking") { RankingScreen(data){nav.navigate("member/$it")} }
                     composable("reports") { ReportsScreen(data){nav.navigate("member/$it")} }
                     composable("settings") { SettingsScreen(data,vm::saveSettings,vm::syncSupabase,vm::changePassword,vm::logout) }
+                    composable("group-attendance") { GroupAttendanceScreen(data,{meeting,present->vm.saveGroupAttendance(meeting,present){nav.popBackStack()}},vm::saveMeetingPlan) }
+                    composable("cycles") { CyclesScreen(data,vm::createCycle,vm::selectCycle,vm::closeCycle) }
                     composable("member/new") { MemberFormScreen(null) { name,photo,birth,group -> vm.saveMember(null,name,photo,birth,group){nav.popBackStack()} } }
                     composable("member/{id}",arguments=listOf(navArgument("id"){type=NavType.LongType})) { back -> val id=back.arguments?.getLong("id") ?: 0; data.members.find { it.id==id }?.let { member -> MemberDetailScreen(data,member,{nav.navigate("member/$id/edit")},{nav.navigate("member/$id/meeting/$it")},{vm.archive(member)},{vm.deleteMember(member){nav.popBackStack()}}) } }
                     composable("member/{id}/edit",arguments=listOf(navArgument("id"){type=NavType.LongType})) { back -> val id=back.arguments?.getLong("id") ?: 0; data.members.find { it.id==id }?.let { member -> MemberFormScreen(member) { name,photo,birth,group -> vm.saveMember(member,name,photo,birth,group){nav.popBackStack()} } } }

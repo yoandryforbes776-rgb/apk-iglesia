@@ -21,9 +21,11 @@ interface MinistryDao {
     fun observeSettings(): Flow<AppSettingsEntity?>
     @Query("SELECT * FROM change_history ORDER BY timestamp DESC LIMIT 100")
     fun observeHistory(): Flow<List<ChangeLogEntity>>
+    @Query("SELECT * FROM cycles ORDER BY createdAt DESC") fun observeCycles(): Flow<List<CycleEntity>>
+    @Query("SELECT * FROM meeting_plans") fun observeMeetingPlans(): Flow<List<MeetingPlanEntity>>
 
-    @Query("SELECT * FROM attendance_records WHERE memberId=:memberId AND meetingId=:meetingId LIMIT 1")
-    suspend fun record(memberId: Long, meetingId: Int): AttendanceRecordEntity?
+    @Query("SELECT * FROM attendance_records WHERE memberId=:memberId AND meetingId=:meetingId AND cycleId=:cycleId LIMIT 1")
+    suspend fun record(memberId: Long, meetingId: Int, cycleId: String): AttendanceRecordEntity?
     @Query("SELECT * FROM admin_users WHERE username=:username AND active=1 LIMIT 1")
     suspend fun admin(username: String): AdminUserEntity?
     @Query("SELECT COUNT(*) FROM admin_users")
@@ -39,6 +41,8 @@ interface MinistryDao {
     @Insert suspend fun insertAdmin(admin: AdminUserEntity): Long
     @Update suspend fun updateAdmin(admin: AdminUserEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveSettings(settings: AppSettingsEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveCycle(cycle: CycleEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveMeetingPlan(plan: MeetingPlanEntity)
 
     @Query("DELETE FROM aspect_scores WHERE recordId=:recordId") suspend fun deleteScores(recordId: Long)
     @Query("DELETE FROM applied_penalties WHERE recordId=:recordId") suspend fun deletePenalties(recordId: Long)
@@ -52,6 +56,8 @@ interface MinistryDao {
     @Query("SELECT * FROM applied_penalties") suspend fun appliedSnapshot(): List<AppliedPenaltyEntity>
     @Query("SELECT * FROM app_settings WHERE id=1") suspend fun settingsSnapshot(): AppSettingsEntity?
     @Query("SELECT * FROM sync_deletions") suspend fun deletionsSnapshot(): List<SyncDeletionEntity>
+    @Query("SELECT * FROM cycles") suspend fun cyclesSnapshot(): List<CycleEntity>
+    @Query("SELECT * FROM meeting_plans") suspend fun meetingPlansSnapshot(): List<MeetingPlanEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveDeletion(item: SyncDeletionEntity)
     @Query("DELETE FROM sync_deletions WHERE syncId=:syncId") suspend fun removeDeletion(syncId: String)
     @Query("SELECT * FROM members WHERE syncId=:syncId LIMIT 1") suspend fun memberBySyncId(syncId: String): MemberEntity?

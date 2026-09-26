@@ -41,6 +41,15 @@ class MinistryViewModel(application: Application) : AndroidViewModel(application
     fun archive(member: MemberEntity) = launch(if(member.active) "Miembro archivado" else "Miembro reactivado") { repository.setMemberActive(member,!member.active) }
     fun saveRecord(memberId: Long, meeting: Int, draft: RecordDraft, done: () -> Unit) = launch("Encuentro guardado", done) { repository.saveRecord(memberId,meeting,draft) }
     fun deleteRecord(memberId: Long, meeting: Int, done: () -> Unit) = launch("Registro eliminado", done) { repository.deleteRecord(memberId,meeting) }
+    fun createCycle(name: String, start: String?, end: String?) {
+        if(name.isBlank()) { _message.value="Escribe el nombre del ciclo"; return }
+        launch("Ciclo creado") { repository.createCycle(name,start,end) }
+    }
+    fun selectCycle(cycle: com.ministerio.jovenes.data.local.CycleEntity) = launch("Ciclo activo: ${cycle.name}") { repository.selectCycle(cycle) }
+    fun closeCycle(cycle: com.ministerio.jovenes.data.local.CycleEntity) = launch("Ciclo cerrado") { repository.closeCycle(cycle) }
+    fun saveGroupAttendance(meeting: Int, present: Set<Long>, done:()->Unit) = launch("Asistencia grupal guardada",done) { repository.saveGroupAttendance(meeting,present) }
+    fun saveMeetingPlan(plan: com.ministerio.jovenes.data.local.MeetingPlanEntity) = launch("Encuentro planificado") { repository.saveMeetingPlan(plan) }
+
     fun saveSettings(settings: AppSettingsEntity) = launch("Configuración guardada") { repository.saveSettings(settings) }
     fun syncSupabase(settings: AppSettingsEntity, password: String) = launch("Sincronización con Supabase completada", shouldAutoSync=false) {
         repository.saveSettings(settings)

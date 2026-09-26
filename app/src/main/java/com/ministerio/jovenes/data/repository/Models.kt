@@ -48,9 +48,13 @@ data class AppSnapshot(
     val penaltyTypes: List<PenaltyTypeEntity> = emptyList(),
     val applied: List<AppliedPenaltyEntity> = emptyList(),
     val settings: AppSettingsEntity = AppSettingsEntity(),
-    val history: List<ChangeLogEntity> = emptyList()
+    val history: List<ChangeLogEntity> = emptyList(),
+    val cycles: List<CycleEntity> = emptyList(),
+    val meetingPlans: List<MeetingPlanEntity> = emptyList()
 ) {
-    fun recordFor(memberId: Long, meetingId: Int) = records.firstOrNull { it.memberId == memberId && it.meetingId == meetingId }
+    val activeCycle get() = cycles.find { it.id==settings.activeCycleId }
+    fun activeRecords() = records.filter { it.cycleId==settings.activeCycleId }
+    fun recordFor(memberId: Long, meetingId: Int) = activeRecords().firstOrNull { it.memberId == memberId && it.meetingId == meetingId }
     fun score(recordId: Long): Int {
         val positive = scores.filter { it.recordId == recordId }.sumOf { it.points }
         val codes = applied.filter { it.recordId == recordId }.map { it.penaltyCode }.toSet()
@@ -59,7 +63,7 @@ data class AppSnapshot(
     fun breakdown(recordId: Long) = scores.filter { it.recordId == recordId }
     fun penaltyBreakdown(recordId: Long) = applied.filter { it.recordId == recordId }.mapNotNull { a -> penaltyTypes.find { it.code == a.penaltyCode } }
     fun progress(member: MemberEntity): MemberProgress {
-        val mine = records.filter { it.memberId == member.id }
+        val mine = activeRecords().filter { it.memberId == member.id }
         return MemberProgress(member, mine.sumOf { score(it.id) }, mine.size, mine.count { it.attended })
     }
     fun ranking() = members.filter { it.active }.map(::progress).sortedWith(compareByDescending<MemberProgress> { it.total }.thenBy { it.member.fullName })
