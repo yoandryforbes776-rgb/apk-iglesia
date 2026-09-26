@@ -28,7 +28,7 @@ object DiplomaExporter {
         // Cruz y libro abiertos dibujados, sin recursos externos.
         paint.color=Color.WHITE; canvas.drawRoundRect(71f,43f,81f,100f,5f,5f,paint); canvas.drawRoundRect(57f,59f,95f,69f,5f,5f,paint)
         paint.color=Color.WHITE; paint.style=Paint.Style.STROKE; paint.strokeWidth=4f
-        val book=Path().apply { moveTo(730f,504f); quadraticTo(750f,495f,766f,510f); quadraticTo(782f,495f,802f,504f); lineTo(799f,535f); quadraticTo(780f,527f,766f,540f); quadraticTo(752f,527f,733f,535f); close() }
+        val book=Path().apply { moveTo(730f,504f); quadTo(750f,495f,766f,510f); quadTo(782f,495f,802f,504f); lineTo(799f,535f); quadTo(780f,527f,766f,540f); quadTo(752f,527f,733f,535f); close() }
         canvas.drawPath(book,paint); paint.style=Paint.Style.FILL
 
         center(canvas,"DIPLOMA DE EXCELENCIA",88f,paint,indigo,31f,true)
