@@ -44,7 +44,7 @@ private val tabs=listOf(MainTab("home","Inicio",Icons.Default.Home),MainTab("mem
                     composable("members") { MembersScreen(data,{nav.navigate("member/$it")},{nav.navigate("member/new")}) }
                     composable("ranking") { RankingScreen(data){nav.navigate("member/$it")} }
                     composable("reports") { ReportsScreen(data){nav.navigate("member/$it")} }
-                    composable("settings") { SettingsScreen(data,vm::saveSettings,vm::changePassword,vm::logout) }
+                    composable("settings") { SettingsScreen(data,vm::saveSettings,vm::syncSupabase,vm::changePassword,vm::logout) }
                     composable("member/new") { MemberFormScreen(null) { name,photo,birth,group -> vm.saveMember(null,name,photo,birth,group){nav.popBackStack()} } }
                     composable("member/{id}",arguments=listOf(navArgument("id"){type=NavType.LongType})) { back -> val id=back.arguments?.getLong("id") ?: 0; data.members.find { it.id==id }?.let { member -> MemberDetailScreen(data,member,{nav.navigate("member/$id/edit")},{nav.navigate("member/$id/meeting/$it")},{vm.archive(member)},{vm.deleteMember(member){nav.popBackStack()}}) } }
                     composable("member/{id}/edit",arguments=listOf(navArgument("id"){type=NavType.LongType})) { back -> val id=back.arguments?.getLong("id") ?: 0; data.members.find { it.id==id }?.let { member -> MemberFormScreen(member) { name,photo,birth,group -> vm.saveMember(member,name,photo,birth,group){nav.popBackStack()} } } }

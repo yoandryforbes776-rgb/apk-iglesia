@@ -33,6 +33,10 @@ class MinistryViewModel(application: Application) : AndroidViewModel(application
     fun saveRecord(memberId: Long, meeting: Int, draft: RecordDraft, done: () -> Unit) = launch("Encuentro guardado", done) { repository.saveRecord(memberId,meeting,draft) }
     fun deleteRecord(memberId: Long, meeting: Int, done: () -> Unit) = launch("Registro eliminado", done) { repository.deleteRecord(memberId,meeting) }
     fun saveSettings(settings: AppSettingsEntity) = launch("Configuración guardada") { repository.saveSettings(settings) }
+    fun syncSupabase(settings: AppSettingsEntity, password: String) = launch("Sincronización con Supabase completada") {
+        repository.saveSettings(settings)
+        repository.syncWithSupabase(password)
+    }
     fun changePassword(current: String, replacement: String) {
         if(replacement.length<8) { _message.value="La contraseña nueva debe tener al menos 8 caracteres"; return }
         viewModelScope.launch { _busy.value=true; runCatching { repository.changePassword(current,replacement) }.onSuccess { ok -> _message.value=if(ok) "Contraseña actualizada" else "La contraseña actual no coincide" }.onFailure { _message.value=it.message }; _busy.value=false }

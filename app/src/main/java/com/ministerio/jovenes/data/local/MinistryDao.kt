@@ -51,4 +51,9 @@ interface MinistryDao {
     @Query("SELECT * FROM penalty_types") suspend fun penaltyTypesSnapshot(): List<PenaltyTypeEntity>
     @Query("SELECT * FROM applied_penalties") suspend fun appliedSnapshot(): List<AppliedPenaltyEntity>
     @Query("SELECT * FROM app_settings WHERE id=1") suspend fun settingsSnapshot(): AppSettingsEntity?
+    @Query("SELECT * FROM sync_deletions") suspend fun deletionsSnapshot(): List<SyncDeletionEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveDeletion(item: SyncDeletionEntity)
+    @Query("DELETE FROM sync_deletions WHERE syncId=:syncId") suspend fun removeDeletion(syncId: String)
+    @Query("SELECT * FROM members WHERE syncId=:syncId LIMIT 1") suspend fun memberBySyncId(syncId: String): MemberEntity?
+    @Query("SELECT * FROM attendance_records WHERE syncId=:syncId LIMIT 1") suspend fun recordBySyncId(syncId: String): AttendanceRecordEntity?
 }

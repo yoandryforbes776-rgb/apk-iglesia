@@ -10,8 +10,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [MemberEntity::class, MeetingEntity::class, AttendanceRecordEntity::class,
         AspectScoreEntity::class, PenaltyTypeEntity::class, AppliedPenaltyEntity::class,
-        ChangeLogEntity::class, AdminUserEntity::class, AppSettingsEntity::class],
-    version = 2,
+        ChangeLogEntity::class, AdminUserEntity::class, AppSettingsEntity::class, SyncDeletionEntity::class],
+    version = 3,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,7 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
                 ).forEach { p -> db.execSQL("INSERT INTO penalty_types(code,label,points,active) VALUES(?,?,?,1)", p) }
                 db.execSQL("INSERT INTO app_settings(id,ministryName,cycleName,majorThreshold,specialThreshold,diplomaThreshold,updatedAt) VALUES(1,?,?,?,?,?,?)", arrayOf("Ministerio de Adolescentes y Jóvenes","Ciclo de 12 encuentros",1100,1000,900,now))
             }
-        }).addMigrations(MIGRATION_1_2).build()
+        }).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -58,6 +58,19 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 penalties.forEach { db.execSQL("INSERT OR IGNORE INTO penalty_types(code,label,points,active) VALUES(?,?,?,1)", it) }
                 db.execSQL("UPDATE attendance_records SET rubricVersion=2")
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE members ADD COLUMN syncId TEXT")
+                db.execSQL("ALTER TABLE attendance_records ADD COLUMN syncId TEXT")
+                db.execSQL("ALTER TABLE app_settings ADD COLUMN supabaseUrl TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE app_settings ADD COLUMN supabaseAnonKey TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE app_settings ADD COLUMN supabaseEmail TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE app_settings ADD COLUMN syncWorkspace TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE app_settings ADD COLUMN lastSyncAt INTEGER")
+                db.execSQL("CREATE TABLE IF NOT EXISTS sync_deletions (syncId TEXT NOT NULL PRIMARY KEY, entityType TEXT NOT NULL, deletedAt INTEGER NOT NULL)")
             }
         }
     }

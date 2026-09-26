@@ -15,7 +15,8 @@ data class MemberEntity(
     val groupName: String? = null,
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val syncId: String? = null
 )
 
 @Entity(tableName = "meetings", indices = [Index(value = ["number"], unique = true)])
@@ -45,7 +46,8 @@ data class AttendanceRecordEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val modifiedBy: Long = 1,
-    @ColumnInfo(defaultValue = "2") val rubricVersion: Int = 2
+    @ColumnInfo(defaultValue = "2") val rubricVersion: Int = 2,
+    val syncId: String? = null
 )
 
 @Entity(
@@ -111,7 +113,19 @@ data class AppSettingsEntity(
     val majorThreshold: Int = 1100,
     val specialThreshold: Int = 1000,
     val diplomaThreshold: Int = 900,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "''") val supabaseUrl: String = "",
+    @ColumnInfo(defaultValue = "''") val supabaseAnonKey: String = "",
+    @ColumnInfo(defaultValue = "''") val supabaseEmail: String = "",
+    @ColumnInfo(defaultValue = "''") val syncWorkspace: String = "",
+    val lastSyncAt: Long? = null
+)
+
+@Entity(tableName = "sync_deletions")
+data class SyncDeletionEntity(
+    @PrimaryKey val syncId: String,
+    val entityType: String,
+    val deletedAt: Long = System.currentTimeMillis()
 )
 
 val ASPECT_POINTS = linkedMapOf(

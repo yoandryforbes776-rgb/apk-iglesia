@@ -1,6 +1,9 @@
 package com.ministerio.jovenes.ui.screens
 
 import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -26,6 +29,7 @@ import com.ministerio.jovenes.ui.components.EmptyState
 import com.ministerio.jovenes.ui.components.ScorePill
 import com.ministerio.jovenes.ui.components.ScriptureCard
 import com.ministerio.jovenes.ui.components.SectionHeading
+import com.ministerio.jovenes.util.DiplomaExporter
 
 @Composable fun MembersScreen(data: AppSnapshot, open:(Long)->Unit, add:()->Unit) {
     var query by remember { mutableStateOf("") }; var archived by remember { mutableStateOf(false) }
@@ -71,10 +75,26 @@ import com.ministerio.jovenes.ui.components.SectionHeading
 }
 
 @Composable fun MemberDetailScreen(data: AppSnapshot, member: MemberEntity, edit:()->Unit, register:(Int)->Unit, archive:()->Unit, delete:()->Unit) {
-    var confirmDelete by remember { mutableStateOf(false) }; val progress=data.progress(member)
+    var confirmDelete by remember { mutableStateOf(false) }; val progress=data.progress(member); val context=LocalContext.current
+    val diplomaName="diploma-${DiplomaExporter.safeName(member.fullName)}.pdf"
+    val saveDiploma=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if(uri!=null) runCatching { DiplomaExporter.write(data,member,context.contentResolver.openOutputStream(uri)!!) }
+            .onSuccess { Toast.makeText(context,"Diploma guardado. Ábrelo para imprimir.",Toast.LENGTH_LONG).show() }
+            .onFailure { Toast.makeText(context,"No se pudo generar el diploma",Toast.LENGTH_LONG).show() }
+    }
+    fun shareDiploma() {
+        runCatching {
+            val dir=File(context.cacheDir,"diplomas").apply { mkdirs() }; val file=File(dir,diplomaName)
+            file.outputStream().use { DiplomaExporter.write(data,member,it) }
+            val uri=FileProvider.getUriForFile(context,"${context.packageName}.files",file)
+            val intent=Intent(Intent.ACTION_SEND).apply { type="application/pdf"; putExtra(Intent.EXTRA_STREAM,uri); putExtra(Intent.EXTRA_TEXT,"Diploma de Excelencia de ${member.fullName} · ${progress.total}/1200 puntos"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            context.startActivity(Intent.createChooser(intent,"Compartir diploma por WhatsApp u otra aplicación"))
+        }.onFailure { Toast.makeText(context,"No se pudo compartir el diploma",Toast.LENGTH_LONG).show() }
+    }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(18.dp,8.dp,18.dp,100.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
         item { Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primaryContainer)) { Column(Modifier.fillMaxWidth().padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(8.dp)) { MemberAvatar(member,82); Text(member.fullName,style=MaterialTheme.typography.titleLarge); Text(member.groupName ?: "Sin grupo"); Text("${progress.total} / 1200",style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary); LinearProgressIndicator({progress.total/1200f},Modifier.fillMaxWidth()); Text("${progress.attendedCount} asistencias · ${progress.meetingsCompleted} registros") } } }
         item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedButton(edit,Modifier.weight(1f)) { Icon(Icons.Default.Edit,null); Text(" Editar") }; OutlinedButton(archive,Modifier.weight(1f)) { Icon(if(member.active) Icons.Default.Archive else Icons.Default.Unarchive,null); Text(if(member.active) " Archivar" else " Reactivar") } } }
+        item { Card(shape=RoundedCornerShape(22.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.tertiaryContainer)) { Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) { Row(verticalAlignment=Alignment.CenterVertically) { Icon(Icons.Default.WorkspacePremium,null,Modifier.size(34.dp),tint=MaterialTheme.colorScheme.tertiary); Spacer(Modifier.width(12.dp)); Column { Text("Diploma de Excelencia",fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium); Text("Personalizado con nombre, ${progress.total} puntos y reconocimiento",style=MaterialTheme.typography.bodySmall) } }; Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedButton({saveDiploma.launch(diplomaName)},Modifier.weight(1f)) { Icon(Icons.Default.Print,null); Text(" Guardar") }; Button({shareDiploma()},Modifier.weight(1f)) { Icon(Icons.Default.Share,null); Text(" WhatsApp") } } } } }
         item { ScriptureCard("Todo lo que hagan, háganlo de corazón, como para el Señor.","Colosenses 3:23",accent=MaterialTheme.colorScheme.secondary) }
         item { SectionHeading("Encuentros","Doce oportunidades para crecer y servir") }
         items(12) { index -> val number=index+1; val record=data.recordFor(member.id,number); val score=record?.let { data.score(it.id) }

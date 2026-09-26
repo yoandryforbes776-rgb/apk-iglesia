@@ -133,6 +133,23 @@ Para descargarla:
 
 La APK release generada usa una firma interna para instalación directa. Para publicar actualizaciones en Google Play se debe sustituir por una clave privada de producción almacenada como GitHub Secret; nunca subas archivos `.jks` ni contraseñas al repositorio.
 
+## Sincronización con Supabase
+
+La app continúa funcionando offline con Room y permite sincronizar miembros, encuentros, aspectos, penalizaciones y eliminaciones entre dispositivos autorizados.
+
+1. Crea un proyecto en [Supabase](https://supabase.com).
+2. Abre **SQL Editor** y ejecuta [`supabase/schema.sql`](supabase/schema.sql).
+3. En **Authentication → Users**, crea el usuario que utilizarán los líderes autorizados.
+4. Copia la **Project URL** y la clave pública **anon/publishable** desde la configuración API de Supabase.
+5. En la app abre **Ajustes → Sincronización Supabase** y completa URL, clave, correo y un código de comunidad idéntico en todos los dispositivos.
+6. Escribe la contraseña de Supabase y pulsa **Guardar y sincronizar ahora**.
+
+La contraseña de Supabase nunca se almacena. Los conflictos se resuelven conservando la modificación más reciente y las eliminaciones se sincronizan mediante marcadores. Por privacidad, las fotos seleccionadas permanecen locales; los perfiles y evaluaciones sí se sincronizan. Se recomienda un proyecto Supabase exclusivo para la iglesia.
+
+## Diplomas personalizados
+
+Desde el detalle de cada miembro se puede crear un **Diploma de Excelencia** horizontal con nombre, puntaje, reconocimiento, versículo, fecha y espacios para firmas. El botón **Guardar** genera un PDF apto para impresión y el botón **WhatsApp** abre el selector de Android para compartirlo por WhatsApp, correo u otra aplicación.
+
 ## Exportaciones y respaldo
 
 En **Reporte final**:
