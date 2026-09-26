@@ -1,6 +1,7 @@
 package com.ministerio.jovenes.data.local
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -43,7 +44,8 @@ data class AttendanceRecordEntity(
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val modifiedBy: Long = 1
+    val modifiedBy: Long = 1,
+    @ColumnInfo(defaultValue = "2") val rubricVersion: Int = 2
 )
 
 @Entity(
@@ -113,11 +115,13 @@ data class AppSettingsEntity(
 )
 
 val ASPECT_POINTS = linkedMapOf(
-    "ATTENDANCE" to 20,
-    "WORD" to 15,
-    "WORSHIP" to 15,
-    "STANDING" to 10,
-    "ANSWERS" to 20,
-    "GAMES" to 10,
+    "ATTENDANCE" to 15,
+    "ATTENTIVE" to 10,
+    "WORD" to 10,
+    "PRAYER" to 10,
+    "WORSHIP" to 10,
+    "STANDING" to 5,
+    "ANSWERS" to 15,
+    "GAMES" to 15,
     "PUNCTUALITY" to 10
 )

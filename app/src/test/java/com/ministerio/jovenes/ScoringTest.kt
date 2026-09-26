@@ -1,20 +1,22 @@
 package com.ministerio.jovenes
 
 import com.ministerio.jovenes.data.local.*
-import com.ministerio.jovenes.data.repository.AppSnapshot
+import com.ministerio.jovenes.data.repository.*
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ScoringTest {
-    @Test fun `meeting score is capped at one hundred`() {
-        val record=AttendanceRecordEntity(id=1,memberId=1,meetingId=1,attended=true)
-        val scores=ASPECT_POINTS.map { AspectScoreEntity(recordId=1,aspect=it.key,achieved=true,points=it.value) }
-        assertEquals(100,AppSnapshot(records=listOf(record),scores=scores).score(1))
+    @Test fun `complete new rubric totals one hundred`() {
+        val draft=RecordDraft(attended=true,attentive=true,word=true,prayer=true,worship=true,
+            standing=true,answers=true,gameParticipation=GameParticipation.PARTICIPATES,punctuality=true)
+        assertEquals(100,draft.aspectScores().values.sum())
+    }
+    @Test fun `respectful member who does not want to play receives five points`() {
+        assertEquals(5,RecordDraft(attended=true,gameParticipation=GameParticipation.RESPECTFUL_NO_PLAY).aspectScores()["GAMES"])
     }
     @Test fun `penalties cannot make result negative`() {
         val record=AttendanceRecordEntity(id=1,memberId=1,meetingId=1,attended=true)
         val penalty=PenaltyTypeEntity("FIGHT","Pelea",-20)
-        val applied=AppliedPenaltyEntity(1,"FIGHT")
-        assertEquals(0,AppSnapshot(records=listOf(record),penaltyTypes=listOf(penalty),applied=listOf(applied)).score(1))
+        assertEquals(0,AppSnapshot(records=listOf(record),penaltyTypes=listOf(penalty),applied=listOf(AppliedPenaltyEntity(1,"FIGHT"))).score(1))
     }
 }

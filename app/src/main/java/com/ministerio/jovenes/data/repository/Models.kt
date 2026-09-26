@@ -2,21 +2,33 @@ package com.ministerio.jovenes.data.repository
 
 import com.ministerio.jovenes.data.local.*
 
+enum class GameParticipation(val points: Int) {
+    NONE(0), RESPECTFUL_NO_PLAY(5), PARTICIPATES(15)
+}
+
 data class RecordDraft(
     val attended: Boolean = false,
+    val attentive: Boolean = false,
     val word: Boolean = false,
+    val prayer: Boolean = false,
     val worship: Boolean = false,
     val standing: Boolean = false,
     val answers: Boolean = false,
-    val games: Boolean = false,
+    val gameParticipation: GameParticipation = GameParticipation.NONE,
     val punctuality: Boolean = false,
     val penalties: Set<String> = emptySet(),
     val notes: String = ""
 ) {
-    fun aspects() = linkedMapOf(
-        "ATTENDANCE" to attended, "WORD" to word, "WORSHIP" to worship,
-        "STANDING" to standing, "ANSWERS" to answers, "GAMES" to games,
-        "PUNCTUALITY" to punctuality
+    fun aspectScores() = linkedMapOf(
+        "ATTENDANCE" to if (attended) ASPECT_POINTS.getValue("ATTENDANCE") else 0,
+        "ATTENTIVE" to if (attentive) ASPECT_POINTS.getValue("ATTENTIVE") else 0,
+        "WORD" to if (word) ASPECT_POINTS.getValue("WORD") else 0,
+        "PRAYER" to if (prayer) ASPECT_POINTS.getValue("PRAYER") else 0,
+        "WORSHIP" to if (worship) ASPECT_POINTS.getValue("WORSHIP") else 0,
+        "STANDING" to if (standing) ASPECT_POINTS.getValue("STANDING") else 0,
+        "ANSWERS" to if (answers) ASPECT_POINTS.getValue("ANSWERS") else 0,
+        "GAMES" to if (attended) gameParticipation.points else 0,
+        "PUNCTUALITY" to if (punctuality) ASPECT_POINTS.getValue("PUNCTUALITY") else 0
     )
 }
 

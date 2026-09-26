@@ -75,8 +75,8 @@ class MinistryRepository(private val db: AppDatabase) {
         val finalId = if (record.id == 0L) id else record.id
         dao.deleteScores(finalId)
         dao.deletePenalties(finalId)
-        val scores = safe.aspects().map { (aspect, achieved) ->
-            AspectScoreEntity(recordId=finalId, aspect=aspect, achieved=achieved, points=if(achieved) ASPECT_POINTS.getValue(aspect) else 0)
+        val scores = safe.aspectScores().map { (aspect, points) ->
+            AspectScoreEntity(recordId=finalId, aspect=aspect, achieved=points > 0, points=points)
         }
         dao.upsertScores(scores)
         if (safe.attended) dao.upsertAppliedPenalties(safe.penalties.map { AppliedPenaltyEntity(finalId, it) })

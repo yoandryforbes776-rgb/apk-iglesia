@@ -10,7 +10,7 @@ La puntuación valora asistencia, amor por la Palabra, adoración, participació
 - Alta, edición, foto, archivo/reactivación y eliminación de miembros.
 - Doce encuentros por miembro, con bloqueo automático de aspectos cuando está ausente.
 - Cálculo automático de 100 puntos por encuentro y 1200 por ciclo.
-- Ocho penalizaciones acumulables; el resultado nunca baja de cero.
+- Trece penalizaciones acumulables, incluyendo conducta en oración, clase, alabanza y juegos; el resultado nunca baja de cero.
 - Detalle de aspectos, penalizaciones, notas, creación y última modificación.
 - Resumen, progreso, ranking y niveles configurables de recompensa.
 - Reporte PDF, archivo CSV compatible con Excel y respaldo JSON.
@@ -61,16 +61,19 @@ Las operaciones que afectan varias tablas se ejecutan dentro de transacciones Ro
 
 | Aspecto | Puntos |
 |---|---:|
-| Asistencia | 20 |
-| Leer la Palabra | 15 |
-| Alabar o adorar | 15 |
-| Mantenerse de pie al alabar | 10 |
-| Responder preguntas | 20 |
-| Participar en juegos | 10 |
+| Asistencia | 15 |
+| Atender y prestar atención a la clase | 10 |
+| Leer la Palabra | 10 |
+| Orar con reverencia | 10 |
+| Alabar o adorar | 10 |
+| Mantenerse de pie al alabar | 5 |
+| Responder preguntas | 15 |
+| Juegos: participa correctamente | 15 |
+| Juegos: no desea jugar, pero permanece respetuoso | 5 |
 | Puntualidad | 10 |
 | **Máximo por encuentro** | **100** |
 
-Si el miembro no asiste, los demás controles se desactivan y el resultado es 0. Las penalizaciones se descuentan después de sumar aspectos y el total se limita al rango 0–100.
+Si el miembro no asiste, los demás controles se desactivan y el resultado es 0. En juegos existe una valoración parcial de 5 puntos para quien no desea jugar pero permanece respetuoso. Las penalizaciones se descuentan después de sumar aspectos y el total se limita al rango 0–100.
 
 ## Abrir y ejecutar en Android Studio
 

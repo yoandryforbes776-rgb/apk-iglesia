@@ -30,7 +30,7 @@ object Exporter {
         root.put("settings",JSONObject().put("ministryName",data.settings.ministryName).put("cycleName",data.settings.cycleName)
             .put("majorThreshold",data.settings.majorThreshold).put("specialThreshold",data.settings.specialThreshold).put("diplomaThreshold",data.settings.diplomaThreshold))
         root.put("members",JSONArray().apply { data.members.forEach { put(JSONObject().put("id",it.id).put("fullName",it.fullName).put("photoUri",it.photoUri).put("birthDate",it.birthDate).put("groupName",it.groupName).put("active",it.active).put("createdAt",it.createdAt).put("updatedAt",it.updatedAt)) } })
-        root.put("records",JSONArray().apply { data.records.forEach { r -> put(JSONObject().put("id",r.id).put("memberId",r.memberId).put("meetingId",r.meetingId).put("attended",r.attended).put("notes",r.notes).put("createdAt",r.createdAt).put("updatedAt",r.updatedAt)) } })
+        root.put("records",JSONArray().apply { data.records.forEach { r -> put(JSONObject().put("id",r.id).put("memberId",r.memberId).put("meetingId",r.meetingId).put("attended",r.attended).put("notes",r.notes).put("createdAt",r.createdAt).put("updatedAt",r.updatedAt).put("rubricVersion",r.rubricVersion)) } })
         root.put("scores",JSONArray().apply { data.scores.forEach { put(JSONObject().put("recordId",it.recordId).put("aspect",it.aspect).put("achieved",it.achieved).put("points",it.points)) } })
         root.put("penalties",JSONArray().apply { data.applied.forEach { put(JSONObject().put("recordId",it.recordId).put("penaltyCode",it.penaltyCode)) } })
         output.bufferedWriter().use { it.write(root.toString(2)) }
