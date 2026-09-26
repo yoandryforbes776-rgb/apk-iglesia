@@ -1,0 +1,228 @@
+package com.ministerio.jovenes.data.repository
+
+import android.content.Context
+import androidx.room.withTransaction
+import com.ministerio.jovenes.data.local.*
+import com.ministerio.jovenes.util.PasswordHasher
+import com.ministerio.jovenes.util.SecureSessionStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withContext
+import java.util.UUID
+
+class MinistryRepository(private val db: AppDatabase, context: Context) {
+    private val dao = db.dao()
+    private val sessionStore = SecureSessionStore(context.applicationContext)
+
+    val snapshot = combine(
+        combine(dao.observeMembers(), dao.observeMeetings(), dao.observeRecords(), dao.observeScores()) { a,b,c,d -> arrayOf(a,b,c,d) },
+        combine(dao.observePenaltyTypes(), dao.observeAppliedPenalties(), dao.observeSettings(), dao.observeHistory()) { a,b,c,d -> arrayOf(a,b,c,d) },
+        combine(dao.observeCycles(),dao.observeMeetingPlans()) { a,b -> arrayOf(a,b) }
+    ) { first, second, third ->
+        @Suppress("UNCHECKED_CAST")
+        AppSnapshot(
+            members=first[0] as List<MemberEntity>, meetings=first[1] as List<MeetingEntity>, records=first[2] as List<AttendanceRecordEntity>, scores=first[3] as List<AspectScoreEntity>,
+            penaltyTypes=second[0] as List<PenaltyTypeEntity>, applied=second[1] as List<AppliedPenaltyEntity>, settings=(second[2] as AppSettingsEntity?) ?: AppSettingsEntity(), history=second[3] as List<ChangeLogEntity>,
+            cycles=third[0] as List<CycleEntity>, meetingPlans=third[1] as List<MeetingPlanEntity>
+        )
+    }
+
+    suspend fun ensureAdmin() {
+        if (dao.adminCount() == 0) {
+            val salt = PasswordHasher.newSalt()
+            dao.insertAdmin(AdminUserEntity(username = "admin", displayName = "Líder", salt = salt, passwordHash = PasswordHasher.hash("Admin123!", salt)))
+        }
+    }
+
+    suspend fun login(username: String, password: String): Boolean {
+        ensureAdmin()
+        val admin = dao.admin(username.trim()) ?: return false
+        val ok = PasswordHasher.verify(password, admin.salt, admin.passwordHash)
+        if (ok) dao.updateAdmin(admin.copy(lastLoginAt = System.currentTimeMillis()))
+        return ok
+    }
+
+    suspend fun mustChangePassword(): Boolean = dao.admin("admin")?.mustChangePassword ?: true
+
+    suspend fun changePassword(current: String, replacement: String): Boolean {
+        val admin = dao.admin("admin") ?: return false
+        if (!PasswordHasher.verify(current, admin.salt, admin.passwordHash)) return false
+        val salt = PasswordHasher.newSalt()
+        dao.updateAdmin(admin.copy(salt = salt, passwordHash = PasswordHasher.hash(replacement, salt), mustChangePassword=false))
+        dao.log(ChangeLogEntity(entityType="ADMIN", entityId=admin.id.toString(), action="PASSWORD", summary="Contraseña actualizada"))
+        return true
+    }
+
+    suspend fun saveMember(existing: MemberEntity?, name: String, photo: String?, birth: String?, group: String?) = db.withTransaction {
+        val now = System.currentTimeMillis()
+        if (existing == null) {
+            val id = dao.insertMember(MemberEntity(fullName=name.trim(), photoUri=photo, birthDate=birth?.ifBlank { null }, groupName=group?.ifBlank { null }, syncId=UUID.randomUUID().toString()))
+            dao.log(ChangeLogEntity(entityType="MEMBER", entityId=id.toString(), action="CREATE", summary="Miembro creado: ${name.trim()}"))
+        } else {
+            dao.updateMember(existing.copy(fullName=name.trim(), photoUri=photo, birthDate=birth?.ifBlank { null }, groupName=group?.ifBlank { null }, updatedAt=now))
+            dao.log(ChangeLogEntity(entityType="MEMBER", entityId=existing.id.toString(), action="UPDATE", summary="Miembro actualizado: ${name.trim()}"))
+        }
+    }
+
+    suspend fun deleteMember(member: MemberEntity) = db.withTransaction {
+        dao.recordsSnapshot().filter { it.memberId==member.id }.mapNotNull { it.syncId }
+            .forEach { dao.saveDeletion(SyncDeletionEntity(it,"RECORD")) }
+        member.syncId?.let { dao.saveDeletion(SyncDeletionEntity(it,"MEMBER")) }
+        dao.deleteMember(member)
+        dao.log(ChangeLogEntity(entityType="MEMBER", entityId=member.id.toString(), action="DELETE", summary="Miembro eliminado: ${member.fullName}"))
+    }
+
+    suspend fun setMemberActive(member: MemberEntity, active: Boolean) = db.withTransaction {
+        dao.updateMember(member.copy(active=active, updatedAt=System.currentTimeMillis()))
+        dao.log(ChangeLogEntity(entityType="MEMBER", entityId=member.id.toString(), action=if(active) "RESTORE" else "ARCHIVE", summary="${member.fullName}: ${if(active) "activo" else "archivado"}"))
+    }
+
+    suspend fun saveRecord(memberId: Long, meetingId: Int, draft: RecordDraft) = db.withTransaction {
+        val cycleId=dao.settingsSnapshot()?.activeCycleId ?: "default-cycle"
+        val existing = dao.record(memberId, meetingId, cycleId)
+        val safe = if (draft.attended) draft else RecordDraft(attended=false, notes=draft.notes)
+        val record = AttendanceRecordEntity(
+            id=existing?.id ?: 0, memberId=memberId, meetingId=meetingId, cycleId=cycleId, attended=safe.attended,
+            notes=safe.notes.trim(), createdAt=existing?.createdAt ?: System.currentTimeMillis(), updatedAt=System.currentTimeMillis(),
+            syncId=existing?.syncId ?: UUID.randomUUID().toString()
+        )
+        val id = dao.upsertRecord(record)
+        val finalId = if (record.id == 0L) id else record.id
+        dao.deleteScores(finalId)
+        dao.deletePenalties(finalId)
+        val scores = safe.aspectScores().map { (aspect, points) ->
+            AspectScoreEntity(recordId=finalId, aspect=aspect, achieved=points > 0, points=points)
+        }
+        dao.upsertScores(scores)
+        if (safe.attended) dao.upsertAppliedPenalties(safe.penalties.map { AppliedPenaltyEntity(finalId, it) })
+        dao.log(ChangeLogEntity(entityType="RECORD", entityId=finalId.toString(), action=if(existing==null) "CREATE" else "UPDATE", summary="Encuentro $meetingId: ${if(safe.attended) "asistió" else "ausente"}"))
+    }
+
+    suspend fun deleteRecord(memberId: Long, meetingId: Int) = db.withTransaction {
+        val cycleId=dao.settingsSnapshot()?.activeCycleId ?: "default-cycle"
+        dao.record(memberId, meetingId, cycleId)?.let {
+            it.syncId?.let { syncId -> dao.saveDeletion(SyncDeletionEntity(syncId,"RECORD")) }
+            dao.deleteRecord(it.id)
+            dao.log(ChangeLogEntity(entityType="RECORD", entityId=it.id.toString(), action="DELETE", summary="Registro del encuentro $meetingId eliminado"))
+        }
+    }
+
+    suspend fun createCycle(name: String, startDate: String?, endDate: String?) = db.withTransaction {
+        val id=UUID.randomUUID().toString(); val now=System.currentTimeMillis()
+        dao.saveCycle(CycleEntity(id=id,name=name.trim(),startDate=startDate?.ifBlank { null },endDate=endDate?.ifBlank { null },createdAt=now,updatedAt=now))
+        val settings=dao.settingsSnapshot() ?: AppSettingsEntity()
+        dao.saveSettings(settings.copy(activeCycleId=id,cycleName=name.trim(),updatedAt=now))
+        dao.log(ChangeLogEntity(entityType="CYCLE",entityId=id,action="CREATE",summary="Ciclo creado: ${name.trim()}"))
+    }
+
+    suspend fun selectCycle(cycle: CycleEntity) {
+        val settings=dao.settingsSnapshot() ?: AppSettingsEntity()
+        dao.saveSettings(settings.copy(activeCycleId=cycle.id,cycleName=cycle.name,updatedAt=System.currentTimeMillis()))
+    }
+
+    suspend fun closeCycle(cycle: CycleEntity) {
+        dao.saveCycle(cycle.copy(status="CLOSED",updatedAt=System.currentTimeMillis()))
+        dao.log(ChangeLogEntity(entityType="CYCLE",entityId=cycle.id,action="CLOSE",summary="Ciclo cerrado: ${cycle.name}"))
+    }
+
+    suspend fun saveMeetingPlan(plan: MeetingPlanEntity) { dao.saveMeetingPlan(plan.copy(updatedAt=System.currentTimeMillis())) }
+
+    suspend fun saveGroupAttendance(meetingId: Int, presentMemberIds: Set<Long>) {
+        dao.membersSnapshot().filter { it.active }.forEach { member ->
+            val existing=dao.record(member.id,meetingId,dao.settingsSnapshot()?.activeCycleId ?: "default-cycle")
+            val scoreRows=existing?.let { record -> dao.scoresSnapshot().filter { it.recordId==record.id } }.orEmpty()
+            val oldScores=scoreRows.associate { it.aspect to it.achieved }
+            val gamePoints=scoreRows.find { it.aspect=="GAMES" }?.points ?: 0
+            val oldPenalties=existing?.let { record -> dao.appliedSnapshot().filter { it.recordId==record.id }.map { it.penaltyCode }.toSet() }.orEmpty()
+            val draft=if(member.id in presentMemberIds) RecordDraft(attended=true,attentive=oldScores["ATTENTIVE"]==true,word=oldScores["WORD"]==true,prayer=oldScores["PRAYER"]==true,worship=oldScores["WORSHIP"]==true,standing=oldScores["STANDING"]==true,answers=oldScores["ANSWERS"]==true,gameParticipation=when { gamePoints>=15->GameParticipation.PARTICIPATES; gamePoints>0->GameParticipation.RESPECTFUL_NO_PLAY; else->GameParticipation.NONE },punctuality=oldScores["PUNCTUALITY"]==true,penalties=oldPenalties,notes=existing?.notes.orEmpty()) else RecordDraft(notes=existing?.notes.orEmpty())
+            saveRecord(member.id,meetingId,draft)
+        }
+    }
+
+    suspend fun saveSettings(settings: AppSettingsEntity) {
+        dao.saveSettings(settings.copy(updatedAt=System.currentTimeMillis()))
+        dao.log(ChangeLogEntity(entityType="SETTINGS", entityId="1", action="UPDATE", summary="Configuración general actualizada"))
+    }
+
+    suspend fun syncWithSupabase(password: String? = null): SyncResult = withContext(Dispatchers.IO) {
+        val settings=dao.settingsSnapshot() ?: AppSettingsEntity()
+        require(settings.supabaseUrl.startsWith("https://")) { "La URL de Supabase debe comenzar con https://" }
+        require(settings.supabaseAnonKey.isNotBlank() && settings.supabaseEmail.isNotBlank() && settings.syncWorkspace.isNotBlank()) { "Completa la configuración de Supabase" }
+        val service=SupabaseSyncService()
+        var session=if(!password.isNullOrBlank()) service.authenticate(settings,password).also(sessionStore::save)
+            else sessionStore.load() ?: throw IllegalStateException("Inicia la sincronización manual una vez para guardar una sesión segura")
+        if(session.expiresAt < System.currentTimeMillis()+60_000) {
+            session=service.refresh(settings,session.refreshToken).also(sessionStore::save)
+        }
+        val token=session.accessToken
+        val churchId=service.claimChurch(settings,token)
+        if(settings.supabaseChurchId!=churchId) dao.saveSettings(settings.copy(supabaseChurchId=churchId))
+
+        db.withTransaction {
+            dao.membersSnapshot().filter { it.syncId.isNullOrBlank() }.forEach { dao.updateMember(it.copy(syncId=UUID.randomUUID().toString())) }
+            dao.recordsSnapshot().filter { it.syncId.isNullOrBlank() }.forEach { dao.upsertRecord(it.copy(syncId=UUID.randomUUID().toString())) }
+        }
+
+        val localDeletions=dao.deletionsSnapshot()
+        service.pushDeletions(settings,token,churchId,localDeletions)
+        val remoteDeletions=service.pullDeletions(settings,token,churchId)
+        db.withTransaction {
+            remoteDeletions.forEach { deleted ->
+                dao.saveDeletion(SyncDeletionEntity(deleted.syncId,deleted.entityType,deleted.deletedAt))
+                if(deleted.entityType=="MEMBER") dao.memberBySyncId(deleted.syncId)?.let { dao.deleteMember(it) }
+                else dao.recordBySyncId(deleted.syncId)?.let { dao.deleteRecord(it.id) }
+            }
+        }
+        val deletedIds=(localDeletions.map { it.syncId }+remoteDeletions.map { it.syncId }).toSet()
+        val remoteCycles=service.pullCycles(settings,token,churchId)
+        val remoteMembers=service.pullMembers(settings,token,churchId).filterNot { it.syncId in deletedIds }
+        val remoteRecords=service.pullRecords(settings,token,churchId).filterNot { it.syncId in deletedIds }
+
+        db.withTransaction {
+            remoteCycles.forEach { remote ->
+                val local=dao.cyclesSnapshot().find { it.id==remote.id }
+                if(local==null || remote.updatedAt>local.updatedAt) dao.saveCycle(CycleEntity(remote.id,remote.name,remote.startDate,remote.endDate,remote.status,remote.createdAt,remote.updatedAt))
+            }
+            remoteMembers.forEach { remote ->
+                val local=dao.memberBySyncId(remote.syncId)
+                if(local==null) dao.insertMember(MemberEntity(fullName=remote.fullName,birthDate=remote.birthDate,groupName=remote.groupName,active=remote.active,createdAt=remote.createdAt,updatedAt=remote.updatedAt,syncId=remote.syncId))
+                else if(remote.updatedAt>local.updatedAt) dao.updateMember(local.copy(fullName=remote.fullName,birthDate=remote.birthDate,groupName=remote.groupName,active=remote.active,createdAt=remote.createdAt,updatedAt=remote.updatedAt))
+            }
+            remoteRecords.forEach { remote ->
+                val member=dao.memberBySyncId(remote.memberSyncId) ?: return@forEach
+                val local=dao.recordBySyncId(remote.syncId) ?: dao.record(member.id,remote.meetingId,remote.cycleId)
+                if(local==null || remote.updatedAt>local.updatedAt) {
+                    val id=dao.upsertRecord(AttendanceRecordEntity(id=local?.id ?: 0,memberId=member.id,meetingId=remote.meetingId,cycleId=remote.cycleId,attended=remote.attended,notes=remote.notes,createdAt=remote.createdAt,updatedAt=remote.updatedAt,rubricVersion=remote.rubricVersion,syncId=remote.syncId))
+                    val recordId=local?.id ?: id
+                    dao.deleteScores(recordId); dao.deletePenalties(recordId)
+                    dao.upsertScores(remote.scores.map { (aspect,points) -> AspectScoreEntity(recordId=recordId,aspect=aspect,achieved=points>0,points=points) })
+                    dao.upsertAppliedPenalties(remote.penalties.map { AppliedPenaltyEntity(recordId,it) })
+                } else if(local.syncId!=remote.syncId) {
+                    // Unifica el identificador cuando dos dispositivos crearon el mismo encuentro offline.
+                    dao.upsertRecord(local.copy(syncId=remote.syncId))
+                }
+            }
+        }
+
+        val finalData=AppSnapshot(
+            members=dao.membersSnapshot(),meetings=dao.meetingsSnapshot(),records=dao.recordsSnapshot(),scores=dao.scoresSnapshot(),
+            penaltyTypes=dao.penaltyTypesSnapshot(),applied=dao.appliedSnapshot(),settings=settings,cycles=dao.cyclesSnapshot(),meetingPlans=dao.meetingPlansSnapshot()
+        )
+        service.pushCycles(settings,token,churchId,finalData.cycles)
+        service.pushMembers(settings,token,churchId,finalData.members)
+        service.pushRecords(settings,token,churchId,finalData)
+        val completed=System.currentTimeMillis()
+        dao.saveSettings(settings.copy(lastSyncAt=completed,supabaseChurchId=churchId))
+        dao.log(ChangeLogEntity(entityType="SYNC",entityId=settings.syncWorkspace,action="SYNC",summary="Sincronización con Supabase completada"))
+        SyncResult(finalData.members.size,finalData.records.size,completed)
+    }
+
+    suspend fun syncWithSavedSession(): SyncResult? {
+        val settings=dao.settingsSnapshot() ?: return null
+        if(settings.supabaseUrl.isBlank() || settings.supabaseAnonKey.isBlank() || settings.supabaseEmail.isBlank() || settings.syncWorkspace.isBlank() || !sessionStore.hasSession()) return null
+        return syncWithSupabase(null)
+    }
+
+    fun hasSupabaseSession()=sessionStore.hasSession()
+    fun clearSupabaseSession()=sessionStore.clear()
+}
