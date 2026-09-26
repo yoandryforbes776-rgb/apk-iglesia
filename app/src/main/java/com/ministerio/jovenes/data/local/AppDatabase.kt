@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [MemberEntity::class, MeetingEntity::class, AttendanceRecordEntity::class,
         AspectScoreEntity::class, PenaltyTypeEntity::class, AppliedPenaltyEntity::class,
         ChangeLogEntity::class, AdminUserEntity::class, AppSettingsEntity::class, SyncDeletionEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -42,8 +42,9 @@ abstract class AppDatabase : RoomDatabase() {
                     arrayOf("SIT_DURING_WORSHIP","Sentarse mientras se alaba a Dios",-5)
                 ).forEach { p -> db.execSQL("INSERT INTO penalty_types(code,label,points,active) VALUES(?,?,?,1)", p) }
                 db.execSQL("INSERT INTO app_settings(id,ministryName,cycleName,majorThreshold,specialThreshold,diplomaThreshold,updatedAt) VALUES(1,?,?,?,?,?,?)", arrayOf("Ministerio de Adolescentes y Jóvenes","Ciclo de 12 encuentros",1100,1000,900,now))
+                db.execSQL("UPDATE app_settings SET supabaseUrl=?, supabaseAnonKey=? WHERE id=1", arrayOf(DEFAULT_SUPABASE_URL,DEFAULT_SUPABASE_PUBLISHABLE_KEY))
             }
-        }).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+        }).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -71,6 +72,13 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE app_settings ADD COLUMN syncWorkspace TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE app_settings ADD COLUMN lastSyncAt INTEGER")
                 db.execSQL("CREATE TABLE IF NOT EXISTS sync_deletions (syncId TEXT NOT NULL PRIMARY KEY, entityType TEXT NOT NULL, deletedAt INTEGER NOT NULL)")
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("UPDATE app_settings SET supabaseUrl=? WHERE id=1 AND supabaseUrl=''", arrayOf(DEFAULT_SUPABASE_URL))
+                db.execSQL("UPDATE app_settings SET supabaseAnonKey=? WHERE id=1 AND supabaseAnonKey=''", arrayOf(DEFAULT_SUPABASE_PUBLISHABLE_KEY))
             }
         }
     }

@@ -163,3 +163,26 @@ Android muestra el selector del sistema para elegir dónde guardar cada archivo.
 ## Privacidad y buenas prácticas
 
 Las fotos se referencian mediante URI persistente del selector de documentos; no se duplican. Evita compartir reportes con datos de menores sin autorización. Archiva un miembro si deseas conservar sus registros; eliminarlo borra sus evaluaciones en cascada.
+
+### Proyecto Supabase preconfigurado
+
+La versión 1.3.1 trae preconfigurados estos datos públicos:
+
+```text
+Project URL: https://ynwjqcrbrqvceaugbwnu.supabase.co
+Project ref: ynwjqcrbrqvceaugbwnu
+Publishable key: sb_publishable_W5fgJFxAAwFsV3xdOzaoOg_O6jsqNbm
+```
+
+No se incluye la contraseña de PostgreSQL ni debe guardarse dentro de la aplicación. La cadena `postgresql://postgres:[YOUR-PASSWORD]...` se utiliza únicamente para administración del servidor, no para sincronizar desde Android.
+
+El esquema puede instalarse pegando `supabase/schema.sql` en el SQL Editor. Como alternativa, con Supabase CLI instalado:
+
+```bash
+supabase login
+supabase init       # omitir si el proyecto local ya fue inicializado
+supabase link --project-ref ynwjqcrbrqvceaugbwnu
+supabase db push
+```
+
+Después crea al menos un usuario en **Authentication → Users**. En la app la URL y la clave ya aparecerán llenas; solo faltará indicar el correo del usuario, su contraseña y el código de comunidad.

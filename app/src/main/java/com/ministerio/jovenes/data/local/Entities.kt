@@ -6,6 +6,10 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+
+const val DEFAULT_SUPABASE_URL = "https://ynwjqcrbrqvceaugbwnu.supabase.co"
+const val DEFAULT_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_W5fgJFxAAwFsV3xdOzaoOg_O6jsqNbm"
+
 @Entity(tableName = "members", indices = [Index("fullName")])
 data class MemberEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -114,8 +118,8 @@ data class AppSettingsEntity(
     val specialThreshold: Int = 1000,
     val diplomaThreshold: Int = 900,
     val updatedAt: Long = System.currentTimeMillis(),
-    @ColumnInfo(defaultValue = "''") val supabaseUrl: String = "",
-    @ColumnInfo(defaultValue = "''") val supabaseAnonKey: String = "",
+    @ColumnInfo(defaultValue = "''") val supabaseUrl: String = DEFAULT_SUPABASE_URL,
+    @ColumnInfo(defaultValue = "''") val supabaseAnonKey: String = DEFAULT_SUPABASE_PUBLISHABLE_KEY,
     @ColumnInfo(defaultValue = "''") val supabaseEmail: String = "",
     @ColumnInfo(defaultValue = "''") val syncWorkspace: String = "",
     val lastSyncAt: Long? = null
