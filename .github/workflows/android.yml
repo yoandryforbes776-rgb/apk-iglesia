@@ -61,10 +61,18 @@ jobs:
           DIAG=$(grep -E '(^e: |FAILURE:|What went wrong|error:|Execution failed)' gradle-release.log | tail -20 | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')
           echo "::error title=Diagnóstico Gradle::$DIAG"
 
+      - name: Verificar APK Release firmada
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' -type f | head -1)
+          test -n "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose "$APK"
+          cp "$APK" app/build/outputs/apk/release/impulso-joven-release.apk
+
       - name: Publicar APK descargable
         uses: actions/upload-artifact@v7
         with:
           name: impulso-joven-release-${{ github.run_number }}
-          path: app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/release/impulso-joven-release.apk
           if-no-files-found: error
           retention-days: 30
