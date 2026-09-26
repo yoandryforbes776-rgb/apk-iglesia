@@ -49,7 +49,9 @@ jobs:
 
       - name: Compilar APK release firmada
         id: release
-        run: ./gradlew assembleRelease --stacktrace 2>&1 | tee gradle-release.log
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease --stacktrace 2>&1 | tee gradle-release.log
 
       - name: Mostrar diagnóstico de Release
         if: failure() && steps.release.outcome == 'failure'
