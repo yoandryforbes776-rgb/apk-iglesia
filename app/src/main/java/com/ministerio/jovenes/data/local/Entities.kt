@@ -106,7 +106,8 @@ data class AdminUserEntity(
     val salt: String,
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
-    val lastLoginAt: Long? = null
+    val lastLoginAt: Long? = null,
+    @ColumnInfo(defaultValue = "1") val mustChangePassword: Boolean = true
 )
 
 @Entity(tableName = "app_settings")
@@ -122,7 +123,8 @@ data class AppSettingsEntity(
     @ColumnInfo(defaultValue = "''") val supabaseAnonKey: String = DEFAULT_SUPABASE_PUBLISHABLE_KEY,
     @ColumnInfo(defaultValue = "''") val supabaseEmail: String = "",
     @ColumnInfo(defaultValue = "''") val syncWorkspace: String = "",
-    val lastSyncAt: Long? = null
+    val lastSyncAt: Long? = null,
+    val supabaseChurchId: String? = null
 )
 
 @Entity(tableName = "sync_deletions")

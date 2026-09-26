@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -22,7 +23,7 @@ data class MainTab(val route:String,val label:String,val icon:ImageVector)
 private val tabs=listOf(MainTab("home","Inicio",Icons.Default.Home),MainTab("members","Miembros",Icons.Default.Groups),MainTab("ranking","Ranking",Icons.Default.EmojiEvents),MainTab("reports","Reportes",Icons.Default.Assessment),MainTab("settings","Ajustes",Icons.Default.Settings))
 
 @Composable fun MinistryRoot(vm: MinistryViewModel= viewModel()) {
-    val logged by vm.loggedIn.collectAsState(); val busy by vm.busy.collectAsState(); val message by vm.message.collectAsState(); val data by vm.data.collectAsState()
+    val logged by vm.loggedIn.collectAsState(); val mustChangePassword by vm.mustChangePassword.collectAsState(); val busy by vm.busy.collectAsState(); val syncing by vm.syncing.collectAsState(); val message by vm.message.collectAsState(); val data by vm.data.collectAsState()
     val snackbar=remember { SnackbarHostState() }
     LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); vm.clearMessage() } }
     Box(Modifier.fillMaxSize()) {
@@ -31,7 +32,7 @@ private val tabs=listOf(MainTab("home","Inicio",Icons.Default.Home),MainTab("mem
             val nav=rememberNavController(); val entry by nav.currentBackStackEntryAsState(); val route=entry?.destination?.route.orEmpty(); val main=route in tabs.map { it.route }
             Scaffold(
                 containerColor=MaterialTheme.colorScheme.background,
-                topBar={ if(main) AppTopBar(when(route){"home"->data.settings.ministryName;"members"->"Miembros";"ranking"->"Ranking general";"reports"->"Reporte final";else->"Configuración"},when(route){"home"->"12 encuentros · 1200 puntos";"ranking"->"El compromiso transforma";else->null}) else when(route) {
+                topBar={ if(main) AppTopBar(when(route){"home"->data.settings.ministryName;"members"->"Miembros";"ranking"->"Ranking general";"reports"->"Reporte final";else->"Configuración"},when(route){"home"->"12 encuentros · 1200 puntos";"ranking"->"El compromiso transforma";else->null},actions={ IconButton({vm.autoSync()}) { if(syncing) CircularProgressIndicator(Modifier.size(21.dp),strokeWidth=2.dp) else Icon(Icons.Default.CloudSync,"Sincronizar") } }) else when(route) {
                     "member/new" -> AppTopBar("Nuevo miembro",back={nav.popBackStack()})
                     "member/{id}/edit" -> AppTopBar("Editar miembro",back={nav.popBackStack()})
                     "member/{id}/meeting/{meeting}" -> AppTopBar("Registrar encuentro",back={nav.popBackStack()})
@@ -54,5 +55,13 @@ private val tabs=listOf(MainTab("home","Inicio",Icons.Default.Home),MainTab("mem
         }
         if(busy&&logged) Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.scrim.copy(alpha=.18f)) { Box(contentAlignment=Alignment.Center) { Card { Row(Modifier.padding(20.dp),verticalAlignment=Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(26.dp),strokeWidth=3.dp); Spacer(Modifier.width(12.dp)); Text("Guardando…") } } } }
         SnackbarHost(snackbar,Modifier.align(Alignment.BottomCenter).padding(bottom=if(logged) 82.dp else 16.dp))
+        if(logged && mustChangePassword) ForcePasswordDialog(vm::changePassword)
     }
+}
+
+@Composable private fun ForcePasswordDialog(change: (String,String)->Unit) {
+    var current by remember { mutableStateOf("") }; var replacement by remember { mutableStateOf("") }; var confirm by remember { mutableStateOf("") }
+    AlertDialog(onDismissRequest={},icon={Icon(Icons.Default.Security,null)},title={Text("Protege tu cuenta")},
+        text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)) { Text("Antes de continuar debes reemplazar la contraseña inicial Admin123! por una contraseña personal."); OutlinedTextField(current,{current=it},label={Text("Contraseña actual")},visualTransformation=PasswordVisualTransformation(),singleLine=true); OutlinedTextField(replacement,{replacement=it},label={Text("Nueva contraseña")},visualTransformation=PasswordVisualTransformation(),singleLine=true); OutlinedTextField(confirm,{confirm=it},label={Text("Confirmar contraseña")},visualTransformation=PasswordVisualTransformation(),singleLine=true); if(confirm.isNotBlank()&&confirm!=replacement) Text("Las contraseñas no coinciden",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.labelMedium) }},
+        confirmButton={Button({change(current,replacement)},enabled=current.isNotBlank()&&replacement.length>=8&&replacement==confirm){Text("Cambiar y continuar")}})
 }

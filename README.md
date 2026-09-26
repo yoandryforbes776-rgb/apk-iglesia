@@ -186,3 +186,11 @@ supabase db push
 ```
 
 Después crea al menos un usuario en **Authentication → Users**. En la app la URL y la clave ya aparecerán llenas; solo faltará indicar el correo del usuario, su contraseña y el código de comunidad.
+
+## Seguridad multi-iglesia y sincronización automática (v1.4)
+
+La sesión remota se cifra con una clave AES/GCM del Android Keystore. Después de la primera sincronización manual, la app renueva el token sin almacenar la contraseña y sincroniza al abrirse y después de guardar cambios. El icono de nube en la barra superior permite sincronizar en cualquier momento.
+
+El esquema nuevo conserva las filas remotas existentes, crea `churches` y `church_memberships`, y asigna cada fila a su comunidad. El primer usuario autenticado que sincroniza un código existente queda como administrador. Las políticas RLS comprueban `auth.uid()` y el rol; conocer el código de comunidad ya no permite leer los datos.
+
+Para actualizar un proyecto Supabase que ya tenía las tablas, vuelve a ejecutar `supabase/schema.sql` en SQL Editor. No borra miembros ni evaluaciones.

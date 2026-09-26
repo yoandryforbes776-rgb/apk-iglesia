@@ -1,6 +1,7 @@
 package com.ministerio.jovenes.data.repository
 
 import com.ministerio.jovenes.data.local.*
+import com.ministerio.jovenes.util.StoredSupabaseSession
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -21,23 +22,28 @@ internal data class RemoteDeletion(val syncId: String, val entityType: String, v
 data class SyncResult(val members: Int, val records: Int, val completedAt: Long)
 
 internal class SupabaseSyncService {
-    fun authenticate(settings: AppSettingsEntity, password: String): String {
+    fun authenticate(settings: AppSettingsEntity, password: String): StoredSupabaseSession {
         val body=JSONObject().put("email",settings.supabaseEmail).put("password",password)
-        val response=request(settings,"POST","/auth/v1/token?grant_type=password",body.toString(),null)
-        return JSONObject(response).getString("access_token")
+        return parseSession(request(settings,"POST","/auth/v1/token?grant_type=password",body.toString(),null))
     }
 
-    fun pullMembers(settings: AppSettingsEntity, token: String): List<RemoteMember> {
-        val workspace=encode(settings.syncWorkspace)
-        val json=JSONArray(request(settings,"GET","/rest/v1/ministry_members?workspace_id=eq.$workspace&select=*",null,token))
+    fun refresh(settings: AppSettingsEntity, refreshToken: String): StoredSupabaseSession =
+        parseSession(request(settings,"POST","/auth/v1/token?grant_type=refresh_token",JSONObject().put("refresh_token",refreshToken).toString(),null))
+
+    fun claimChurch(settings: AppSettingsEntity, token: String): String {
+        val body=JSONObject().put("workspace_code",settings.syncWorkspace.trim().lowercase()).put("display_name",settings.ministryName)
+        return request(settings,"POST","/rest/v1/rpc/claim_church",body.toString(),token).trim().trim('"')
+    }
+
+    fun pullMembers(settings: AppSettingsEntity, token: String, churchId: String): List<RemoteMember> {
+        val json=JSONArray(request(settings,"GET","/rest/v1/ministry_members?church_id=eq.${encode(churchId)}&select=*",null,token))
         return (0 until json.length()).map { i -> json.getJSONObject(i).let { o ->
             RemoteMember(o.getString("sync_id"),o.getString("full_name"),o.nullable("birth_date"),o.nullable("group_name"),o.optBoolean("active",true),o.getLong("created_at"),o.getLong("updated_at"))
         }}
     }
 
-    fun pullRecords(settings: AppSettingsEntity, token: String): List<RemoteRecord> {
-        val workspace=encode(settings.syncWorkspace)
-        val json=JSONArray(request(settings,"GET","/rest/v1/ministry_records?workspace_id=eq.$workspace&select=*",null,token))
+    fun pullRecords(settings: AppSettingsEntity, token: String, churchId: String): List<RemoteRecord> {
+        val json=JSONArray(request(settings,"GET","/rest/v1/ministry_records?church_id=eq.${encode(churchId)}&select=*",null,token))
         return (0 until json.length()).map { i -> json.getJSONObject(i).let { o ->
             val scoreObject=o.optJSONObject("scores") ?: JSONObject()
             val scores=scoreObject.keys().asSequence().associateWith { scoreObject.optInt(it) }
@@ -47,28 +53,27 @@ internal class SupabaseSyncService {
         }}
     }
 
-    fun pullDeletions(settings: AppSettingsEntity, token: String): List<RemoteDeletion> {
-        val workspace=encode(settings.syncWorkspace)
-        val json=JSONArray(request(settings,"GET","/rest/v1/ministry_deletions?workspace_id=eq.$workspace&select=*",null,token))
+    fun pullDeletions(settings: AppSettingsEntity, token: String, churchId: String): List<RemoteDeletion> {
+        val json=JSONArray(request(settings,"GET","/rest/v1/ministry_deletions?church_id=eq.${encode(churchId)}&select=*",null,token))
         return (0 until json.length()).map { i -> json.getJSONObject(i).let { RemoteDeletion(it.getString("sync_id"),it.getString("entity_type"),it.getLong("deleted_at")) } }
     }
 
-    fun pushMembers(settings: AppSettingsEntity, token: String, members: List<MemberEntity>) {
+    fun pushMembers(settings: AppSettingsEntity, token: String, churchId: String, members: List<MemberEntity>) {
         if(members.isEmpty()) return
         val body=JSONArray().apply { members.forEach { m -> put(JSONObject()
-            .put("workspace_id",settings.syncWorkspace).put("sync_id",m.syncId).put("full_name",m.fullName)
+            .put("workspace_id",settings.syncWorkspace).put("church_id",churchId).put("sync_id",m.syncId).put("full_name",m.fullName)
             .put("birth_date",m.birthDate ?: JSONObject.NULL).put("group_name",m.groupName ?: JSONObject.NULL)
             .put("active",m.active).put("created_at",m.createdAt).put("updated_at",m.updatedAt)) } }
         request(settings,"POST","/rest/v1/ministry_members?on_conflict=workspace_id,sync_id",body.toString(),token,"resolution=merge-duplicates")
     }
 
-    fun pushRecords(settings: AppSettingsEntity, token: String, data: AppSnapshot) {
+    fun pushRecords(settings: AppSettingsEntity, token: String, churchId: String, data: AppSnapshot) {
         if(data.records.isEmpty()) return
         val memberIds=data.members.associate { it.id to it.syncId }
         val body=JSONArray().apply { data.records.forEach { r ->
             val scores=JSONObject().apply { data.breakdown(r.id).forEach { put(it.aspect,it.points) } }
             val penalties=JSONArray().apply { data.applied.filter { it.recordId==r.id }.forEach { put(it.penaltyCode) } }
-            put(JSONObject().put("workspace_id",settings.syncWorkspace).put("sync_id",r.syncId)
+            put(JSONObject().put("workspace_id",settings.syncWorkspace).put("church_id",churchId).put("sync_id",r.syncId)
                 .put("member_sync_id",memberIds[r.memberId]).put("meeting_id",r.meetingId).put("attended",r.attended)
                 .put("notes",r.notes).put("created_at",r.createdAt).put("updated_at",r.updatedAt)
                 .put("rubric_version",r.rubricVersion).put("scores",scores).put("penalties",penalties))
@@ -76,14 +81,19 @@ internal class SupabaseSyncService {
         request(settings,"POST","/rest/v1/ministry_records?on_conflict=workspace_id,sync_id",body.toString(),token,"resolution=merge-duplicates")
     }
 
-    fun pushDeletions(settings: AppSettingsEntity, token: String, deletions: List<SyncDeletionEntity>) {
+    fun pushDeletions(settings: AppSettingsEntity, token: String, churchId: String, deletions: List<SyncDeletionEntity>) {
         if(deletions.isEmpty()) return
-        val body=JSONArray().apply { deletions.forEach { put(JSONObject().put("workspace_id",settings.syncWorkspace).put("sync_id",it.syncId).put("entity_type",it.entityType).put("deleted_at",it.deletedAt)) } }
+        val body=JSONArray().apply { deletions.forEach { put(JSONObject().put("workspace_id",settings.syncWorkspace).put("church_id",churchId).put("sync_id",it.syncId).put("entity_type",it.entityType).put("deleted_at",it.deletedAt)) } }
         request(settings,"POST","/rest/v1/ministry_deletions?on_conflict=workspace_id,sync_id",body.toString(),token,"resolution=merge-duplicates")
         deletions.forEach {
             val table=if(it.entityType=="MEMBER") "ministry_members" else "ministry_records"
-            request(settings,"DELETE","/rest/v1/$table?workspace_id=eq.${encode(settings.syncWorkspace)}&sync_id=eq.${encode(it.syncId)}",null,token)
+            request(settings,"DELETE","/rest/v1/$table?church_id=eq.${encode(churchId)}&sync_id=eq.${encode(it.syncId)}",null,token)
         }
+    }
+
+    private fun parseSession(response: String): StoredSupabaseSession {
+        val json=JSONObject(response); val expiresIn=json.optLong("expires_in",3600)
+        return StoredSupabaseSession(json.getString("access_token"),json.getString("refresh_token"),System.currentTimeMillis()+expiresIn*1000)
     }
 
     private fun request(settings: AppSettingsEntity, method: String, path: String, body: String?, token: String?, prefer: String?=null): String {

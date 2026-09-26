@@ -1,15 +1,18 @@
 package com.ministerio.jovenes.data.repository
 
+import android.content.Context
 import androidx.room.withTransaction
 import com.ministerio.jovenes.data.local.*
 import com.ministerio.jovenes.util.PasswordHasher
+import com.ministerio.jovenes.util.SecureSessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
-class MinistryRepository(private val db: AppDatabase) {
+class MinistryRepository(private val db: AppDatabase, context: Context) {
     private val dao = db.dao()
+    private val sessionStore = SecureSessionStore(context.applicationContext)
 
     val snapshot = combine(
         combine(dao.observeMembers(), dao.observeMeetings(), dao.observeRecords(), dao.observeScores()) { a,b,c,d -> arrayOf(a,b,c,d) },
@@ -37,11 +40,13 @@ class MinistryRepository(private val db: AppDatabase) {
         return ok
     }
 
+    suspend fun mustChangePassword(): Boolean = dao.admin("admin")?.mustChangePassword ?: true
+
     suspend fun changePassword(current: String, replacement: String): Boolean {
         val admin = dao.admin("admin") ?: return false
         if (!PasswordHasher.verify(current, admin.salt, admin.passwordHash)) return false
         val salt = PasswordHasher.newSalt()
-        dao.updateAdmin(admin.copy(salt = salt, passwordHash = PasswordHasher.hash(replacement, salt)))
+        dao.updateAdmin(admin.copy(salt = salt, passwordHash = PasswordHasher.hash(replacement, salt), mustChangePassword=false))
         dao.log(ChangeLogEntity(entityType="ADMIN", entityId=admin.id.toString(), action="PASSWORD", summary="Contraseña actualizada"))
         return true
     }
@@ -103,13 +108,19 @@ class MinistryRepository(private val db: AppDatabase) {
         dao.log(ChangeLogEntity(entityType="SETTINGS", entityId="1", action="UPDATE", summary="Configuración general actualizada"))
     }
 
-    suspend fun syncWithSupabase(password: String): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun syncWithSupabase(password: String? = null): SyncResult = withContext(Dispatchers.IO) {
         val settings=dao.settingsSnapshot() ?: AppSettingsEntity()
         require(settings.supabaseUrl.startsWith("https://")) { "La URL de Supabase debe comenzar con https://" }
         require(settings.supabaseAnonKey.isNotBlank() && settings.supabaseEmail.isNotBlank() && settings.syncWorkspace.isNotBlank()) { "Completa la configuración de Supabase" }
-        require(password.isNotBlank()) { "Escribe la contraseña de Supabase" }
         val service=SupabaseSyncService()
-        val token=service.authenticate(settings,password)
+        var session=if(!password.isNullOrBlank()) service.authenticate(settings,password).also(sessionStore::save)
+            else sessionStore.load() ?: throw IllegalStateException("Inicia la sincronización manual una vez para guardar una sesión segura")
+        if(session.expiresAt < System.currentTimeMillis()+60_000) {
+            session=service.refresh(settings,session.refreshToken).also(sessionStore::save)
+        }
+        val token=session.accessToken
+        val churchId=service.claimChurch(settings,token)
+        if(settings.supabaseChurchId!=churchId) dao.saveSettings(settings.copy(supabaseChurchId=churchId))
 
         db.withTransaction {
             dao.membersSnapshot().filter { it.syncId.isNullOrBlank() }.forEach { dao.updateMember(it.copy(syncId=UUID.randomUUID().toString())) }
@@ -117,8 +128,8 @@ class MinistryRepository(private val db: AppDatabase) {
         }
 
         val localDeletions=dao.deletionsSnapshot()
-        service.pushDeletions(settings,token,localDeletions)
-        val remoteDeletions=service.pullDeletions(settings,token)
+        service.pushDeletions(settings,token,churchId,localDeletions)
+        val remoteDeletions=service.pullDeletions(settings,token,churchId)
         db.withTransaction {
             remoteDeletions.forEach { deleted ->
                 dao.saveDeletion(SyncDeletionEntity(deleted.syncId,deleted.entityType,deleted.deletedAt))
@@ -127,8 +138,8 @@ class MinistryRepository(private val db: AppDatabase) {
             }
         }
         val deletedIds=(localDeletions.map { it.syncId }+remoteDeletions.map { it.syncId }).toSet()
-        val remoteMembers=service.pullMembers(settings,token).filterNot { it.syncId in deletedIds }
-        val remoteRecords=service.pullRecords(settings,token).filterNot { it.syncId in deletedIds }
+        val remoteMembers=service.pullMembers(settings,token,churchId).filterNot { it.syncId in deletedIds }
+        val remoteRecords=service.pullRecords(settings,token,churchId).filterNot { it.syncId in deletedIds }
 
         db.withTransaction {
             remoteMembers.forEach { remote ->
@@ -156,11 +167,20 @@ class MinistryRepository(private val db: AppDatabase) {
             members=dao.membersSnapshot(),meetings=dao.meetingsSnapshot(),records=dao.recordsSnapshot(),scores=dao.scoresSnapshot(),
             penaltyTypes=dao.penaltyTypesSnapshot(),applied=dao.appliedSnapshot(),settings=settings
         )
-        service.pushMembers(settings,token,finalData.members)
-        service.pushRecords(settings,token,finalData)
+        service.pushMembers(settings,token,churchId,finalData.members)
+        service.pushRecords(settings,token,churchId,finalData)
         val completed=System.currentTimeMillis()
-        dao.saveSettings(settings.copy(lastSyncAt=completed))
+        dao.saveSettings(settings.copy(lastSyncAt=completed,supabaseChurchId=churchId))
         dao.log(ChangeLogEntity(entityType="SYNC",entityId=settings.syncWorkspace,action="SYNC",summary="Sincronización con Supabase completada"))
         SyncResult(finalData.members.size,finalData.records.size,completed)
     }
+
+    suspend fun syncWithSavedSession(): SyncResult? {
+        val settings=dao.settingsSnapshot() ?: return null
+        if(settings.supabaseUrl.isBlank() || settings.supabaseAnonKey.isBlank() || settings.supabaseEmail.isBlank() || settings.syncWorkspace.isBlank() || !sessionStore.hasSession()) return null
+        return syncWithSupabase(null)
+    }
+
+    fun hasSupabaseSession()=sessionStore.hasSession()
+    fun clearSupabaseSession()=sessionStore.clear()
 }

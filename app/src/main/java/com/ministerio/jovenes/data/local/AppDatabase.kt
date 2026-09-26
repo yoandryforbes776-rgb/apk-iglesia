@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [MemberEntity::class, MeetingEntity::class, AttendanceRecordEntity::class,
         AspectScoreEntity::class, PenaltyTypeEntity::class, AppliedPenaltyEntity::class,
         ChangeLogEntity::class, AdminUserEntity::class, AppSettingsEntity::class, SyncDeletionEntity::class],
-    version = 4,
+    version = 6,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("INSERT INTO app_settings(id,ministryName,cycleName,majorThreshold,specialThreshold,diplomaThreshold,updatedAt) VALUES(1,?,?,?,?,?,?)", arrayOf("Ministerio de Adolescentes y Jóvenes","Ciclo de 12 encuentros",1100,1000,900,now))
                 db.execSQL("UPDATE app_settings SET supabaseUrl=?, supabaseAnonKey=? WHERE id=1", arrayOf(DEFAULT_SUPABASE_URL,DEFAULT_SUPABASE_PUBLISHABLE_KEY))
             }
-        }).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+        }).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -79,6 +79,18 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("UPDATE app_settings SET supabaseUrl=? WHERE id=1 AND supabaseUrl=''", arrayOf(DEFAULT_SUPABASE_URL))
                 db.execSQL("UPDATE app_settings SET supabaseAnonKey=? WHERE id=1 AND supabaseAnonKey=''", arrayOf(DEFAULT_SUPABASE_PUBLISHABLE_KEY))
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE app_settings ADD COLUMN supabaseChurchId TEXT")
+            }
+        }
+
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE admin_users ADD COLUMN mustChangePassword INTEGER NOT NULL DEFAULT 1")
             }
         }
     }
