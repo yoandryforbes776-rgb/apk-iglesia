@@ -15,7 +15,7 @@ La puntuación valora asistencia, amor por la Palabra, adoración, participació
 - Resumen, progreso, ranking y niveles configurables de recompensa.
 - Reporte PDF, archivo CSV compatible con Excel y respaldo JSON.
 - Historial local de cambios y operación completa sin Internet.
-- Tema Material 3 moderno, adaptable a modo claro/oscuro.
+- Tema Material Design 3 moderno, adaptable a modo claro/oscuro, con ilustraciones vectoriales cristianas, encabezados juveniles y versículos de motivación en las pantallas principales.
 
 ## Arquitectura
 

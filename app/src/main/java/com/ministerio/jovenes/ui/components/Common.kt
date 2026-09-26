@@ -18,15 +18,16 @@ import androidx.compose.ui.unit.dp
     TopAppBar(
         title={ Column { Text(title, fontWeight=FontWeight.Bold); subtitle?.let { Text(it,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant) } } },
         navigationIcon={ if(back!=null) IconButton(onClick=back) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"Volver") } }, actions=actions,
-        colors=TopAppBarDefaults.topAppBarColors(containerColor=MaterialTheme.colorScheme.surface)
+        colors=TopAppBarDefaults.topAppBarColors(containerColor=MaterialTheme.colorScheme.surface,scrolledContainerColor=MaterialTheme.colorScheme.surface)
     )
 }
 
 @Composable fun StatCard(title: String, value: String, icon: ImageVector, color: Color, modifier: Modifier=Modifier) {
-    Card(modifier,shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=color.copy(alpha=.12f))) {
-        Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Icon(icon,null,tint=color); Text(value,style=MaterialTheme.typography.headlineMedium,color=color,fontWeight=FontWeight.Bold)
-            Text(title,style=MaterialTheme.typography.labelLarge)
+    Card(modifier,shape=RoundedCornerShape(22.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),elevation=CardDefaults.cardElevation(3.dp),border=androidx.compose.foundation.BorderStroke(1.dp,color.copy(alpha=.12f))) {
+        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            Surface(shape=RoundedCornerShape(12.dp),color=color.copy(alpha=.12f)) { Icon(icon,null,Modifier.padding(8.dp).size(21.dp),tint=color) }
+            Text(value,style=MaterialTheme.typography.headlineMedium,color=color,fontWeight=FontWeight.ExtraBold)
+            Text(title,style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

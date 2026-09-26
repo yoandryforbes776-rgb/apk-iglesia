@@ -17,6 +17,8 @@ import com.ministerio.jovenes.data.local.MemberEntity
 import com.ministerio.jovenes.data.repository.AppSnapshot
 import com.ministerio.jovenes.data.repository.RecordDraft
 import com.ministerio.jovenes.data.repository.GameParticipation
+import com.ministerio.jovenes.ui.components.ScriptureCard
+import com.ministerio.jovenes.ui.components.SectionHeading
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -40,9 +42,10 @@ import java.util.*
     val total=if(draft.attended) (positives+deductions).coerceIn(0,100) else 0
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
         Card(shape=RoundedCornerShape(22.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primaryContainer)) { Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically) { MemberAvatar(member,54); Spacer(Modifier.width(14.dp)); Column(Modifier.weight(1f)) { Text(member.fullName,fontWeight=FontWeight.Bold); Text("Encuentro $meeting") }; Column(horizontalAlignment=Alignment.End) { Text(total.toString(),style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary); Text("de 100 puntos",style=MaterialTheme.typography.labelSmall) } } }
+        ScriptureCard("Hágase todo decentemente y con orden.","1 Corintios 14:40",accent=MaterialTheme.colorScheme.secondary)
         Card(shape=RoundedCornerShape(18.dp)) { Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically) { Icon(if(draft.attended) Icons.Default.HowToReg else Icons.Default.PersonOff,null,tint=if(draft.attended) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text("Asistencia",fontWeight=FontWeight.Bold); Text(if(draft.attended) "+15 puntos" else "Ausente: el encuentro vale 0",style=MaterialTheme.typography.labelMedium) }; Switch(draft.attended,{ value -> draft=if(value) draft.copy(attended=true) else RecordDraft(attended=false,notes=draft.notes) }) } }
         if(!draft.attended) Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.padding(16.dp)) { Icon(Icons.Default.Info,null); Spacer(Modifier.width(10.dp)); Text("Los demás aspectos y penalizaciones se deshabilitan cuando el miembro no asiste.") } }
-        Text("Compromiso y participación",style=MaterialTheme.typography.titleLarge)
+        SectionHeading("Compromiso y participación","Valora con justicia cada esfuerzo verdadero")
         AspectToggle("Atender y prestar atención a la clase",10,draft.attentive,draft.attended) { draft=draft.copy(attentive=it) }
         AspectToggle("Leer la Palabra",10,draft.word,draft.attended) { draft=draft.copy(word=it) }
         AspectToggle("Orar con reverencia",10,draft.prayer,draft.attended) { draft=draft.copy(prayer=it) }
@@ -51,7 +54,7 @@ import java.util.*
         AspectToggle("Responder preguntas",15,draft.answers,draft.attended) { draft=draft.copy(answers=it) }
         GameParticipationSelector(draft.gameParticipation,draft.attended) { draft=draft.copy(gameParticipation=it) }
         AspectToggle("Puntualidad",10,draft.punctuality,draft.attended) { draft=draft.copy(punctuality=it) }
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Text("Penalizaciones",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge); if(deductions<0) AssistChip({},label={Text("$deductions puntos")},leadingIcon={Icon(Icons.Default.Warning,null)}) }
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { SectionHeading("Penalizaciones","Corrección con amor y propósito",Modifier.weight(1f)); if(deductions<0) AssistChip({},label={Text("$deductions puntos")},leadingIcon={Icon(Icons.Default.Warning,null)}) }
         Text("Selecciona solo hechos observados. El puntaje nunca será menor que 0.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         data.penaltyTypes.forEach { penalty -> val checked=penalty.code in draft.penalties
             Card(colors=CardDefaults.cardColors(containerColor=if(checked) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface)) { Row(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) { Checkbox(checked,{ enabled -> draft=draft.copy(penalties=if(enabled) draft.penalties+penalty.code else draft.penalties-penalty.code) },enabled=draft.attended); Text(penalty.label,Modifier.weight(1f)); Text(penalty.points.toString(),fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error) } }

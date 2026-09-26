@@ -24,6 +24,8 @@ import com.ministerio.jovenes.data.local.MemberEntity
 import com.ministerio.jovenes.data.repository.AppSnapshot
 import com.ministerio.jovenes.ui.components.EmptyState
 import com.ministerio.jovenes.ui.components.ScorePill
+import com.ministerio.jovenes.ui.components.ScriptureCard
+import com.ministerio.jovenes.ui.components.SectionHeading
 
 @Composable fun MembersScreen(data: AppSnapshot, open:(Long)->Unit, add:()->Unit) {
     var query by remember { mutableStateOf("") }; var archived by remember { mutableStateOf(false) }
@@ -31,8 +33,9 @@ import com.ministerio.jovenes.ui.components.ScorePill
     Box(Modifier.fillMaxSize()) {
         Column { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth().padding(16.dp),placeholder={Text("Buscar por nombre o grupo")},leadingIcon={Icon(Icons.Default.Search,null)},trailingIcon=if(query.isNotBlank()) ({ IconButton({query=""}) { Icon(Icons.Default.Close,null) } }) else null,singleLine=true,shape=RoundedCornerShape(18.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal=18.dp),verticalAlignment=Alignment.CenterVertically) { Text("Mostrar archivados",Modifier.weight(1f),style=MaterialTheme.typography.labelLarge); Switch(archived,{archived=it}) }
+            ScriptureCard("Acuérdate de tu Creador en los días de tu juventud.","Eclesiastés 12:1",Modifier.padding(horizontal=16.dp,vertical=8.dp),MaterialTheme.colorScheme.secondary)
             if(list.isEmpty()) EmptyState(Icons.Default.Group,"Aún no hay miembros","Crea el primer perfil para comenzar el ciclo.") { Button(add) { Icon(Icons.Default.PersonAdd,null); Text(" Agregar miembro") } }
-            else LazyColumn(contentPadding=PaddingValues(16.dp,10.dp,16.dp,100.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) { items(list,key={it.id}) { member ->
+            else LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp,10.dp,16.dp,100.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) { items(list,key={it.id}) { member ->
                 val p=data.progress(member)
                 Card(onClick={open(member.id)},shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=if(member.active) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant)) {
                     Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(13.dp)) {
@@ -72,7 +75,8 @@ import com.ministerio.jovenes.ui.components.ScorePill
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(18.dp,8.dp,18.dp,100.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
         item { Card(shape=RoundedCornerShape(24.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primaryContainer)) { Column(Modifier.fillMaxWidth().padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(8.dp)) { MemberAvatar(member,82); Text(member.fullName,style=MaterialTheme.typography.titleLarge); Text(member.groupName ?: "Sin grupo"); Text("${progress.total} / 1200",style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary); LinearProgressIndicator({progress.total/1200f},Modifier.fillMaxWidth()); Text("${progress.attendedCount} asistencias · ${progress.meetingsCompleted} registros") } } }
         item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedButton(edit,Modifier.weight(1f)) { Icon(Icons.Default.Edit,null); Text(" Editar") }; OutlinedButton(archive,Modifier.weight(1f)) { Icon(if(member.active) Icons.Default.Archive else Icons.Default.Unarchive,null); Text(if(member.active) " Archivar" else " Reactivar") } } }
-        item { Text("Encuentros",style=MaterialTheme.typography.titleLarge) }
+        item { ScriptureCard("Todo lo que hagan, háganlo de corazón, como para el Señor.","Colosenses 3:23",accent=MaterialTheme.colorScheme.secondary) }
+        item { SectionHeading("Encuentros","Doce oportunidades para crecer y servir") }
         items(12) { index -> val number=index+1; val record=data.recordFor(member.id,number); val score=record?.let { data.score(it.id) }
             Card(onClick={register(number)},shape=RoundedCornerShape(18.dp)) { Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically) { Surface(shape=CircleShape,color=if(record!=null) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant) { Text(number.toString(),Modifier.padding(12.dp),fontWeight=FontWeight.Bold) }; Spacer(Modifier.width(14.dp)); Column(Modifier.weight(1f)) { Text("Encuentro $number",fontWeight=FontWeight.SemiBold); Text(when { record==null -> "Pendiente"; record.attended -> "Asistió · ${data.penaltyBreakdown(record.id).size} penalizaciones"; else -> "Ausente" },style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant) }; if(score!=null) ScorePill(score) else Icon(Icons.Default.ChevronRight,null) } }
         }

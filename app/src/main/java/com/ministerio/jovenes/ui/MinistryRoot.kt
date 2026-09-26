@@ -30,13 +30,14 @@ private val tabs=listOf(MainTab("home","Inicio",Icons.Default.Home),MainTab("mem
         else {
             val nav=rememberNavController(); val entry by nav.currentBackStackEntryAsState(); val route=entry?.destination?.route.orEmpty(); val main=route in tabs.map { it.route }
             Scaffold(
+                containerColor=MaterialTheme.colorScheme.background,
                 topBar={ if(main) AppTopBar(when(route){"home"->data.settings.ministryName;"members"->"Miembros";"ranking"->"Ranking general";"reports"->"Reporte final";else->"Configuración"},when(route){"home"->"12 encuentros · 1200 puntos";"ranking"->"El compromiso transforma";else->null}) else when(route) {
                     "member/new" -> AppTopBar("Nuevo miembro",back={nav.popBackStack()})
                     "member/{id}/edit" -> AppTopBar("Editar miembro",back={nav.popBackStack()})
                     "member/{id}/meeting/{meeting}" -> AppTopBar("Registrar encuentro",back={nav.popBackStack()})
                     else -> AppTopBar("Detalle del miembro",back={nav.popBackStack()})
                 } },
-                bottomBar={ AnimatedVisibility(main) { NavigationBar { val destination=entry?.destination; tabs.forEach { tab -> NavigationBarItem(selected=destination?.hierarchy?.any { it.route==tab.route }==true,onClick={nav.navigate(tab.route){popUpTo("home"){saveState=true};launchSingleTop=true;restoreState=true}},icon={Icon(tab.icon,tab.label)},label={Text(tab.label)}) } } } }
+                bottomBar={ AnimatedVisibility(main) { NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=10.dp) { val destination=entry?.destination; tabs.forEach { tab -> NavigationBarItem(selected=destination?.hierarchy?.any { it.route==tab.route }==true,onClick={nav.navigate(tab.route){popUpTo("home"){saveState=true};launchSingleTop=true;restoreState=true}},icon={Icon(tab.icon,tab.label)},label={Text(tab.label)}) } } } }
             ) { padding ->
                 NavHost(nav,"home",Modifier.padding(padding)) {
                     composable("home") { DashboardScreen(data,{nav.navigate("members")},{nav.navigate("ranking")},{nav.navigate("reports")}) }
