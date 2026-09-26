@@ -101,24 +101,24 @@ Linux/macOS:
 
 ```bash
 chmod +x gradlew
-./gradlew testDebugUnitTest assembleDebug
+./gradlew testDebugUnitTest assembleRelease
 ```
 
 Windows:
 
 ```powershell
-.\gradlew.bat testDebugUnitTest assembleDebug
+.\gradlew.bat testDebugUnitTest assembleRelease
 ```
 
 APK resultante:
 
 ```text
-app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/release/app-release.apk
 ```
 
 ## GitHub Actions y descarga del APK
 
-El workflow [`.github/workflows/android.yml`](.github/workflows/android.yml) se ejecuta en cada `push`, `pull_request` hacia `main` o manualmente. Configura Java 17, prueba el proyecto, ejecuta `./gradlew assembleDebug` y publica la APK por 30 días.
+El workflow [`.github/workflows/android.yml`](.github/workflows/android.yml) se ejecuta en cada `push`, `pull_request` hacia `main` o manualmente. Configura Java 17, prueba el proyecto, ejecuta `./gradlew assembleRelease` y publica la APK release firmada por 30 días.
 
 Para descargarla:
 
@@ -126,9 +126,9 @@ Para descargarla:
 2. Entra en **Actions**.
 3. Selecciona **Compilar APK Android** y una ejecución exitosa.
 4. Baja hasta **Artifacts**.
-5. Descarga `impulso-joven-debug-<número>` y descomprime el ZIP.
+5. Descarga `impulso-joven-release-<número>` y descomprime el ZIP.
 
-La APK debug sirve para pruebas internas. Para distribución pública se recomienda añadir una clave de firma como GitHub Secret y un build `release` firmado; nunca subas archivos `.jks` ni contraseñas al repositorio.
+La APK release generada usa una firma interna para instalación directa. Para publicar actualizaciones en Google Play se debe sustituir por una clave privada de producción almacenada como GitHub Secret; nunca subas archivos `.jks` ni contraseñas al repositorio.
 
 ## Exportaciones y respaldo
 

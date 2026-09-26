@@ -21,6 +21,9 @@ android {
 
     buildTypes {
         release {
+            // Firma interna para generar una APK release instalable desde GitHub Actions.
+            // Para Google Play se debe reemplazar por una clave privada de producción.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
